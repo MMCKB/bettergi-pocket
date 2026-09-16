@@ -27,6 +27,9 @@ jobs:
       - name: Setup Gradle (cache enabled)
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
       - name: Accept Android SDK licenses
         run: |
           if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
