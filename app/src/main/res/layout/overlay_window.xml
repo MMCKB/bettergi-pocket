@@ -358,8 +358,6 @@
                     app:trackTintMode="src_in" />
             </LinearLayout>
 
-        </LinearLayout>
-
             <LinearLayout
                 android:id="@+id/overlay_row_black_screen"
                 android:layout_width="match_parent"
@@ -406,11 +404,7 @@
                     app:trackTintMode="src_in" />
             </LinearLayout>
 
-        </LinearLayout>
-
         <LinearLayout
-            android:id="@+id/overlay_row_auto_pick"        <LinearLayout
-            android:id="@+id/overlay_row_auto_pick"        <LinearLayout
             android:id="@+id/overlay_row_auto_pick"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
