@@ -40,6 +40,18 @@ class AccessibilityAutomationController(
         }
     }
 
+    private fun executeBack() {
+        if (!InputAccessibilityService.isConnected()) {
+            Log.w(TAG, "skip back, accessibility service is not connected")
+            return
+        }
+        mainHandler.post {
+            if (!InputAccessibilityService.back()) {
+                Log.w(TAG, "back action failed")
+            }
+        }
+    }
+
     private companion object {
         const val TAG = "BetterGI.Input"
         const val RESTORE_TOUCH_DELAY_MS = 40L

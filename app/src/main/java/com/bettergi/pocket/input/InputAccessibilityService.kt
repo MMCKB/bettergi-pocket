@@ -64,6 +64,7 @@ class InputAccessibilityService : AccessibilityService() {
         private const val AUTHORITY_SUFFIX = ".a11y"
         private const val METHOD_STATUS = "status"
         private const val METHOD_CLICK = "click"
+        private const val METHOD_BACK = "back"
         private const val KEY_CONNECTED = "connected"
         private const val KEY_LAST_PACKAGE = "last_package"
         private const val KEY_X = "x"
