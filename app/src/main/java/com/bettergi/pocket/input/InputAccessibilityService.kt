@@ -78,6 +78,8 @@ class InputAccessibilityService : AccessibilityService() {
         const val DEFAULT_PROMPT = "请开启无障碍权限，才能模拟点击"
         const val CRASHED_PROMPT = "无障碍服务已异常，请先关闭再重新打开"
         const val ACTION_STATE_CHANGED = "com.bettergi.pocket.action.ACCESSIBILITY_CHANGED"
+        const val ACTION_TOUCH_STATE = "com.bettergi.pocket.action.TOUCH_STATE"
+        const val EXTRA_TOUCHING = "touching"
         private const val AUTHORITY_SUFFIX = ".a11y"
         private const val METHOD_STATUS = "status"
         private const val METHOD_CLICK = "click"
