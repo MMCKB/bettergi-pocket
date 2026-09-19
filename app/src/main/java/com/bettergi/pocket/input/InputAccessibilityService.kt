@@ -38,17 +38,7 @@ class InputAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         when (event.eventType) {
-            AccessibilityEvent.TYPE_TOUCH_INTERACTION_START -> {
-                userTouchingLocally = true
-                Log.i(TAG, "touch interaction start detected")
-                broadcastTouchState(true)
-            }
-            AccessibilityEvent.TYPE_TOUCH_INTERACTION_END -> {
-                userTouchingLocally = false
-                lastTouchEndAtMs = SystemClock.elapsedRealtime()
-                Log.i(TAG, "touch interaction end detected")
-                broadcastTouchState(false)
-            }
+
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 val pkg = event.packageName?.toString() ?: return
                 if (pkg == packageName || pkg in TRANSIENT_PACKAGES) return
@@ -57,12 +47,7 @@ class InputAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun broadcastTouchState(touching: Boolean) {
-        sendBroadcast(Intent(ACTION_TOUCH_STATE).apply {
-            setPackage(packageName)
-            putExtra(EXTRA_TOUCHING, touching)
-        })
-    }
+
 
     override fun onInterrupt() = Unit
 
@@ -83,11 +68,7 @@ class InputAccessibilityService : AccessibilityService() {
         const val DEFAULT_PROMPT = "请开启无障碍权限，才能模拟点击"
         const val CRASHED_PROMPT = "无障碍服务已异常，请先关闭再重新打开"
         const val ACTION_STATE_CHANGED = "com.bettergi.pocket.action.ACCESSIBILITY_CHANGED"
-        const val ACTION_TOUCH_STATE = "com.bettergi.pocket.action.TOUCH_STATE"
-        const val EXTRA_TOUCHING = "touching"
-
-        /** 手指抬起后继续避让的时间，避免刚抬手就被点击打断。 */
-        private const val TOUCH_GRACE_MS = 150L
+        
         private const val AUTHORITY_SUFFIX = ".a11y"
         private const val METHOD_STATUS = "status"
         private const val METHOD_CLICK = "click"
@@ -107,13 +88,7 @@ class InputAccessibilityService : AccessibilityService() {
         @Volatile
         private var lastAppPackage: String? = null
 
-        /** 手指是否按在屏幕上（本进程判断，点击注入前零延迟检查）。 */
-        @Volatile
-        private var userTouchingLocally = false
-
-        /** 手指最后一次离开屏幕的时间（elapsedRealtime）。 */
-        @Volatile
-        private var lastTouchEndAtMs = 0L
+    
 
         @Volatile
         private var appContext: Context? = null
@@ -274,14 +249,6 @@ class InputAccessibilityService : AccessibilityService() {
 
         private fun clickLocal(x: Int, y: Int, durationMs: Long): Boolean {
             val service = instance ?: return false
-            if (userTouchingLocally) {
-                Log.i(TAG, "skip click: user is touching the screen")
-                return false
-            }
-            if (SystemClock.elapsedRealtime() - lastTouchEndAtMs < TOUCH_GRACE_MS) {
-                Log.i(TAG, "skip click: within touch grace period")
-                return false
-            }
             val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
             val stroke = GestureDescription.StrokeDescription(path, 0, durationMs.coerceAtLeast(1L))
             val gesture = GestureDescription.Builder().addStroke(stroke).build()

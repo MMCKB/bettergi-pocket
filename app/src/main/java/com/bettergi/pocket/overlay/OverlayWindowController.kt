@@ -636,7 +636,7 @@ class OverlayWindowController(
     }
 
 
-    fun appendLog(message: String) {
+    private fun appendLog(message: String) {
         mainHandler.post {
             if (!logWindowVisible || logText == null) return@post
             val line = "${logTimeFormat.format(Date())} $message"

@@ -95,11 +95,7 @@ class TriggerForegroundService : Service() {
                     OptionKeywords.load(applicationContext.assets),
                 ),
             ),
-            actionController = AccessibilityAutomationController(
-                applicationContext,
-                overlayController,
-                logger = { overlayController.appendLog(it) },
-            ),
+            actionController = AccessibilityAutomationController(overlayController),
         )
         settingsRepository.addListener(settingsListener)
         genshinLaunchMonitor.start()
