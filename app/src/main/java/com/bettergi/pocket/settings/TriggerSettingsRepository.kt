@@ -45,6 +45,14 @@ class TriggerSettingsRepository(context: Context) {
         update { it.copy(autoLaunchGenshinEnabled = enabled) }
     }
 
+    fun setSmartOptionEnabled(enabled: Boolean) {
+        update { it.copy(smartOptionEnabled = enabled) }
+    }
+
+    fun setBlackScreenClickEnabled(enabled: Boolean) {
+        update { it.copy(blackScreenClickEnabled = enabled) }
+    }
+
     private fun update(transform: (TriggerSettings) -> TriggerSettings) {
         val newValue: TriggerSettings
         synchronized(lock) {
@@ -59,6 +67,8 @@ class TriggerSettingsRepository(context: Context) {
                 .putBoolean(KEY_AUTO_SKIP, updated.autoSkipEnabled)
                 .putBoolean(KEY_QUICK_SKIP, updated.quickSkipDialogueEnabled)
                 .putBoolean(KEY_AUTO_LAUNCH_GENSHIN, updated.autoLaunchGenshinEnabled)
+                .putBoolean(KEY_SMART_OPTION, updated.smartOptionEnabled)
+                .putBoolean(KEY_BLACK_SCREEN, updated.blackScreenClickEnabled)
                 .apply()
         }
         listeners.forEach { listener ->
@@ -72,6 +82,8 @@ class TriggerSettingsRepository(context: Context) {
         autoSkipEnabled = prefs.getBoolean(KEY_AUTO_SKIP, false),
         quickSkipDialogueEnabled = prefs.getBoolean(KEY_QUICK_SKIP, true),
         autoLaunchGenshinEnabled = prefs.getBoolean(KEY_AUTO_LAUNCH_GENSHIN, false),
+        smartOptionEnabled = prefs.getBoolean(KEY_SMART_OPTION, true),
+        blackScreenClickEnabled = prefs.getBoolean(KEY_BLACK_SCREEN, true),
     )
 
     private companion object {
@@ -81,5 +93,7 @@ class TriggerSettingsRepository(context: Context) {
         const val KEY_AUTO_SKIP = "autoSkipEnabled"
         const val KEY_QUICK_SKIP = "quickSkipDialogueEnabled"
         const val KEY_AUTO_LAUNCH_GENSHIN = "autoLaunchGenshinEnabled"
+        const val KEY_SMART_OPTION = "smartOptionEnabled"
+        const val KEY_BLACK_SCREEN = "blackScreenClickEnabled"
     }
 }

@@ -66,7 +66,7 @@ class AutoSkipFeature(
                     state = State.IN_DIALOG
                     return
                 }
-                clickBlackScreenIfNeeded(content, actions)
+                if (settings.blackScreenClickEnabled) clickBlackScreenIfNeeded(content, actions)
             }
 
             State.IN_DIALOG -> {
@@ -105,7 +105,11 @@ class AutoSkipFeature(
 
                 val chatIcon = assets.get(TASK_NAME, "ChatIcon", content.captureRectArea)
                 val hits = content.findMulti(chatIcon)
-                val target = decideOption(content, hits) ?: return
+                val target = if (settings.smartOptionEnabled) {
+                    decideOption(content, hits)
+                } else {
+                    selectTopChatIcon(hits)
+                } ?: return
                 val (topX, topY) = target.centerOnNativeCapture()
                 events?.onChatIconsRecognized(hits.size, topX, topY)
 

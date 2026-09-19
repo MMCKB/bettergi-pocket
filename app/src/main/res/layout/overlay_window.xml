@@ -312,7 +312,105 @@
             </LinearLayout>
         </LinearLayout>
 
+            <LinearLayout
+                android:id="@+id/overlay_row_smart_option"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:minHeight="36dp"
+                android:orientation="horizontal"
+                android:paddingStart="10dp"
+                android:paddingTop="2dp"
+                android:paddingEnd="4dp"
+                android:paddingBottom="4dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="智能选择选项"
+                        android:textColor="@color/overlay_text"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="1dp"
+                        android:text="OCR 读选项文字按关键词选择"
+                        android:textColor="@color/overlay_text_muted"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/overlay_switch_smart_option"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:showText="false"
+                    app:thumbTint="@color/overlay_switch_thumb"
+                    app:thumbTintMode="src_in"
+                    app:trackTint="@color/overlay_switch_track"
+                    app:trackTintMode="src_in" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/overlay_row_black_screen"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:minHeight="36dp"
+                android:orientation="horizontal"
+                android:paddingStart="10dp"
+                android:paddingTop="2dp"
+                android:paddingEnd="4dp"
+                android:paddingBottom="4dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="黑屏转场点击"
+                        android:textColor="@color/overlay_text"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="1dp"
+                        android:text="剧情黑屏转场自动点击推进"
+                        android:textColor="@color/overlay_text_muted"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/overlay_switch_black_screen"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:showText="false"
+                    app:thumbTint="@color/overlay_switch_thumb"
+                    app:thumbTintMode="src_in"
+                    app:trackTint="@color/overlay_switch_track"
+                    app:trackTintMode="src_in" />
+            </LinearLayout>
+
+        </LinearLayout>
+
         <LinearLayout
+            android:id="@+id/overlay_row_auto_pick"        <LinearLayout
+            android:id="@+id/overlay_row_auto_pick"        <LinearLayout
             android:id="@+id/overlay_row_auto_pick"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

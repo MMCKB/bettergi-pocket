@@ -6,4 +6,6 @@ data class TriggerSettings(
     val autoSkipEnabled: Boolean,
     val quickSkipDialogueEnabled: Boolean,
     val autoLaunchGenshinEnabled: Boolean = false,
+    val smartOptionEnabled: Boolean = true,
+    val blackScreenClickEnabled: Boolean = true,
 )

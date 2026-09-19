@@ -99,6 +99,8 @@ class OverlayWindowController(
     private var switchEnabled: SwitchCompat? = null
     private var switchAutoSkip: SwitchCompat? = null
     private var switchQuickSkip: SwitchCompat? = null
+    private var switchSmartOption: SwitchCompat? = null
+    private var switchBlackScreen: SwitchCompat? = null
     private var switchAutoPick: SwitchCompat? = null
     private var switchAutoLaunch: SwitchCompat? = null
     private var launchHint: TextView? = null
@@ -106,6 +108,8 @@ class OverlayWindowController(
     private var logToggleButton: ImageButton? = null
     private var rowAutoSkip: View? = null
     private var rowQuickSkip: View? = null
+    private var rowSmartOption: View? = null
+    private var rowBlackScreen: View? = null
     private var rowAutoPick: View? = null
     private var rowLaunch: View? = null
     private var autoSkipExtras: View? = null
@@ -147,6 +151,8 @@ class OverlayWindowController(
             switchEnabled?.isChecked = settings.screenShareEnabled
             switchAutoSkip?.isChecked = settings.autoSkipEnabled
             switchQuickSkip?.isChecked = settings.quickSkipDialogueEnabled
+            switchSmartOption?.isChecked = settings.smartOptionEnabled
+            switchBlackScreen?.isChecked = settings.blackScreenClickEnabled
             switchAutoPick?.isChecked = settings.autoPickEnabled
             switchAutoLaunch?.isChecked = settings.autoLaunchGenshinEnabled
             applyFeatureEnabled(settings)
@@ -169,6 +175,8 @@ class OverlayWindowController(
         val enabledSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_enabled)
         val autoSkipSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_auto_skip)
         val quickSkipSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_quick_skip)
+        val smartOptionSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_smart_option)
+        val blackScreenSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_black_screen)
         val autoPickSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_auto_pick)
         val autoLaunchSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_auto_launch)
         val logToggle = root.findViewById<ImageButton>(R.id.overlay_log_toggle)
@@ -187,6 +195,8 @@ class OverlayWindowController(
         switchEnabled = enabledSwitch
         switchAutoSkip = autoSkipSwitch
         switchQuickSkip = quickSkipSwitch
+        switchSmartOption = smartOptionSwitch
+        switchBlackScreen = blackScreenSwitch
         switchAutoPick = autoPickSwitch
         switchAutoLaunch = autoLaunchSwitch
         launchHint = root.findViewById(R.id.overlay_auto_launch_hint)
@@ -194,6 +204,8 @@ class OverlayWindowController(
         logToggleButton = logToggle
         rowAutoSkip = root.findViewById(R.id.overlay_row_auto_skip)
         rowQuickSkip = root.findViewById(R.id.overlay_row_quick_skip)
+        rowSmartOption = root.findViewById(R.id.overlay_row_smart_option)
+        rowBlackScreen = root.findViewById(R.id.overlay_row_black_screen)
         rowLaunch = root.findViewById(R.id.overlay_row_launch)
         rowAutoPick = root.findViewById<View>(R.id.overlay_row_auto_pick).also { row ->
             row.visibility = if (AutoPickFeature.AVAILABLE) View.VISIBLE else View.GONE
@@ -259,6 +271,14 @@ class OverlayWindowController(
         quickSkipSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (updatingUi) return@setOnCheckedChangeListener
             settingsRepository.setQuickSkipDialogueEnabled(isChecked)
+        }
+        smartOptionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (updatingUi) return@setOnCheckedChangeListener
+            settingsRepository.setSmartOptionEnabled(isChecked)
+        }
+        blackScreenSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (updatingUi) return@setOnCheckedChangeListener
+            settingsRepository.setBlackScreenClickEnabled(isChecked)
         }
         autoPickSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (updatingUi) return@setOnCheckedChangeListener
@@ -378,6 +398,8 @@ class OverlayWindowController(
         switchEnabled = null
         switchAutoSkip = null
         switchQuickSkip = null
+        switchSmartOption = null
+        switchBlackScreen = null
         switchAutoPick = null
         switchAutoLaunch = null
         launchHint = null
@@ -385,6 +407,8 @@ class OverlayWindowController(
         logToggleButton = null
         rowAutoSkip = null
         rowQuickSkip = null
+        rowSmartOption = null
+        rowBlackScreen = null
         rowAutoPick = null
         rowLaunch = null
         autoSkipExtras = null
@@ -549,9 +573,13 @@ class OverlayWindowController(
         switchAutoSkip?.isEnabled = shareOn
         switchAutoPick?.isEnabled = shareOn
         switchQuickSkip?.isEnabled = autoSkipOn
+        switchSmartOption?.isEnabled = autoSkipOn
+        switchBlackScreen?.isEnabled = autoSkipOn
         rowAutoSkip?.alpha = if (shareOn) 1f else 0.45f
         rowAutoPick?.alpha = if (shareOn) 1f else 0.45f
         rowQuickSkip?.alpha = if (autoSkipOn) 1f else 0.45f
+        rowSmartOption?.alpha = if (autoSkipOn) 1f else 0.45f
+        rowBlackScreen?.alpha = if (autoSkipOn) 1f else 0.45f
     }
 
     override fun onTalkHistoryMatched() {
