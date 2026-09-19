@@ -47,8 +47,7 @@ class InputAccessibilityService : AccessibilityService() {
                 lastTouchEndAtMs = SystemClock.elapsedRealtime()
                 broadcastTouchState(false)
             }
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
-            AccessibilityEvent.TYPE_WINDOW_FOCUS_CHANGED -> {
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 val pkg = event.packageName?.toString() ?: return
                 if (pkg == packageName || pkg in TRANSIENT_PACKAGES) return
                 lastAppPackage = pkg
