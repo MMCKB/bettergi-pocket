@@ -40,11 +40,13 @@ class InputAccessibilityService : AccessibilityService() {
         when (event.eventType) {
             AccessibilityEvent.TYPE_TOUCH_INTERACTION_START -> {
                 userTouchingLocally = true
+                Log.i(TAG, "touch interaction start detected")
                 broadcastTouchState(true)
             }
             AccessibilityEvent.TYPE_TOUCH_INTERACTION_END -> {
                 userTouchingLocally = false
                 lastTouchEndAtMs = SystemClock.elapsedRealtime()
+                Log.i(TAG, "touch interaction end detected")
                 broadcastTouchState(false)
             }
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
