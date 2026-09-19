@@ -3,6 +3,7 @@ name: Build APK
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
     paths-ignore:
       - 'README.md'
       - '.github/**'
@@ -26,6 +27,21 @@ jobs:
 
       - name: Setup Gradle (cache enabled)
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/bettergi.keystore"
+            echo "KEYSTORE_PATH=$RUNNER_TEMP/bettergi.keystore" >> "$GITHUB_ENV"
+            echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+          fi
 
       - name: Make gradlew executable
         run: chmod +x gradlew
