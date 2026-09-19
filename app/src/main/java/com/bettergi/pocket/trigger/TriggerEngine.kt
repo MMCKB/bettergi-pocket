@@ -25,9 +25,6 @@ class TriggerEngine(
     @Volatile
     private var lastActionAtMs: Long = 0L
 
-    @Volatile
-    private var lastActionAtMs: Long = 0L
-
     fun start() {
         if (running) return
         running = true
