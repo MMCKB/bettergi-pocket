@@ -93,11 +93,13 @@ class TriggerForegroundService : Service() {
                     recognitionAssets,
                     overlayController,
                     OptionKeywords.load(applicationContext.assets),
-                    isGenshinForeground = { InputAccessibilityService.isGenshinInForeground() == true },
-                    foregroundPackageName = { InputAccessibilityService.foregroundPackage() },
                 ),
             ),
-            actionController = AccessibilityAutomationController(applicationContext, overlayController),
+            actionController = AccessibilityAutomationController(
+                applicationContext,
+                overlayController,
+                logger = { overlayController.appendLog(it) },
+            ),
         )
         settingsRepository.addListener(settingsListener)
         genshinLaunchMonitor.start()

@@ -7,7 +7,6 @@ import com.bettergi.pocket.recognition.CaptureContent
 import com.bettergi.pocket.recognition.IntRect
 import com.bettergi.pocket.recognition.RecognitionAssets
 import com.bettergi.pocket.recognition.RecognitionObject
-import com.bettergi.pocket.recognition.area.ImageRegion
 import com.bettergi.pocket.recognition.area.Region
 import com.bettergi.pocket.recognition.opencv.MatOps
 import com.bettergi.pocket.settings.TriggerSettings
@@ -17,7 +16,6 @@ import com.bettergi.pocket.trigger.screenBottomCenter
 import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.Scalar
-import org.opencv.imgproc.Imgproc
 
 /**
  * 自动对话（移植 PC 版 AutoSkip 核心，去掉语音/弹窗/邀约）：
@@ -28,8 +26,6 @@ class AutoSkipFeature(
     private val assets: RecognitionAssets,
     private val events: AutoSkipEvents? = null,
     private val optionKeywords: OptionKeywords = OptionKeywords(),
-    private val isGenshinForeground: () -> Boolean = { true },
-    private val foregroundPackageName: () -> String? = { null },
 ) : TriggerFeature {
 
     override val key: String = "AutoSkip"
@@ -48,21 +44,6 @@ class AutoSkipFeature(
     private var clickedAtMs: Long = 0L
 
     @Volatile
-    private var lastOcrCheckMs: Long = 0L
-
-    @Volatile
-    private var lastOcrDialogueHit: Boolean = false
-
-    @Volatile
-    private var dialogueMissStreak: Int = 0
-
-    @Volatile
-    private var lastChatIconCheckMs: Long = 0L
-
-    @Volatile
-    private var lastChatIconHit: Boolean = false
-
-    @Volatile
     private var lastOptionDecisionAtMs: Long = 0L
 
     @Volatile
@@ -72,15 +53,6 @@ class AutoSkipFeature(
     private var lastIdleLogMs: Long = 0L
 
     @Volatile
-    private var lastForegroundCheckMs: Long = 0L
-
-    @Volatile
-    private var lastForegroundResult: Boolean = true
-
-    @Volatile
-    private var lastForegroundMissLogMs: Long = 0L
-
-    @Volatile
     private var lastSkipLogMs: Long = 0L
 
     override fun isEnabled(settings: TriggerSettings): Boolean =
@@ -88,11 +60,10 @@ class AutoSkipFeature(
 
     override fun onTick(tick: FeatureTick, settings: TriggerSettings, actions: ActionEmitter) {
         val content = tick.content ?: return
-        if (settings.genshinForegroundOnly && !foregroundOk()) return
 
         when (state) {
             State.IDLE -> {
-                if (inDialogue(content, settings)) {
+                if (inDialogue(content)) {
                     events?.onTalkHistoryMatched()
                     state = State.IN_DIALOG
                     return
@@ -106,7 +77,7 @@ class AutoSkipFeature(
             }
 
             State.IN_DIALOG -> {
-                if (!inDialogue(content, settings)) {
+                if (!inDialogue(content)) {
                     state = State.IDLE
                     return
                 }
@@ -148,7 +119,7 @@ class AutoSkipFeature(
                 val chatIcon = assets.get(TASK_NAME, "ChatIcon", content.captureRectArea)
                 val hits = content.findMulti(chatIcon)
                 val decision = if (settings.smartOptionEnabled) {
-                    decideOption(content, hits, settings)
+                    decideOption(content, hits)
                 } else {
                     selectTopChatIcon(hits)?.let { Decision(it) }
                 } ?: return
@@ -165,7 +136,7 @@ class AutoSkipFeature(
             }
 
             State.CONFIRMING -> {
-                if (!inDialogue(content, settings)) {
+                if (!inDialogue(content)) {
                     state = State.IDLE
                     return
                 }
@@ -218,92 +189,17 @@ class AutoSkipFeature(
         }
     }
 
-    /** 原神是否在前台（节流查询，避免每拍跨进程调用）；未命中时记录实际前台包名便于排查。 */
-    private fun foregroundOk(): Boolean {
-        val now = System.currentTimeMillis()
-        if (now - lastForegroundCheckMs < FOREGROUND_CHECK_INTERVAL_MS) return lastForegroundResult
-        lastForegroundCheckMs = now
-        lastForegroundResult = isGenshinForeground()
-        if (!lastForegroundResult && now - lastForegroundMissLogMs >= FOREGROUND_MISS_LOG_INTERVAL_MS) {
-            lastForegroundMissLogMs = now
-            events?.onAutoSkipLog("非原神前台，暂停自动对话（当前：${foregroundPackageName() ?: "未知"}）")
-        }
-        return lastForegroundResult
-    }
-
-    /**
-     * 对话判定：
-     * 强信号（历史图标 / 选项气泡）每拍判定；弱信号（OCR 对话文本，带长度行数过滤）仅用于进入；
-     * 连续 MISS 若干拍才判为退出，避免迟滞与闪断。
-     */
-    private fun inDialogue(content: CaptureContent, settings: TriggerSettings): Boolean {
-        if (isDialogueScene(content, assets) || hasChatIcons(content)) {
-            dialogueMissStreak = 0
-            return true
-        }
-        if (settings.smartOptionEnabled && ocrDialogueHit(content)) {
-            dialogueMissStreak = 0
-            return true
-        }
-        dialogueMissStreak++
-        return dialogueMissStreak < DIALOGUE_EXIT_CONFIRM_COUNT
-    }
-
-    /** 选项气泡存在属于强对话信号（500ms 缓存）。 */
-    private fun hasChatIcons(content: CaptureContent): Boolean {
-        val now = System.currentTimeMillis()
-        if (now - lastChatIconCheckMs < CHAT_ICON_CHECK_INTERVAL_MS) return lastChatIconHit
-        lastChatIconCheckMs = now
-        val ro = assets.get(TASK_NAME, "ChatIcon", content.captureRectArea)
-        lastChatIconHit = content.findMulti(ro).isNotEmpty()
-        return lastChatIconHit
-    }
-
-    /** OCR 对话文本判定：需满足最小长度与行数限制，1.5s 节流。 */
-    private fun ocrDialogueHit(content: CaptureContent): Boolean {
-        val now = System.currentTimeMillis()
-        if (now - lastOcrCheckMs < OCR_CHECK_INTERVAL_MS) return lastOcrDialogueHit
-        lastOcrCheckMs = now
-        val ro = assets.get(TASK_NAME, "DialogueText", content.captureRectArea)
-        val lines = content.findMulti(ro)
-        val text = lines.joinToString("") { it.text ?: "" }
-            .replace(" ", "")
-            .replace("\n", "")
-        lastOcrDialogueHit = text.length >= DIALOGUE_TEXT_MIN_LEN &&
-            lines.size <= DIALOGUE_TEXT_MAX_LINES
-        return lastOcrDialogueHit
-    }
-
-    /** 橙色文字判定（对齐 PC IsOrangeOption）：RGB 243-255/195-205/48-55 占比 > 6%。 */
-    private fun isOrangeOption(region: ImageRegion, item: Region): Boolean {
-        val rect = item.toRect()
-        if (rect.width <= 0 || rect.height <= 0) return false
-        val roi = MatOps.roiView(region.srcMat, rect)
-        val rgb = Mat()
-        val mask = Mat()
-        return try {
-            Imgproc.cvtColor(roi, rgb, Imgproc.COLOR_BGR2RGB)
-            Core.inRange(rgb, Scalar(243.0, 195.0, 48.0), Scalar(255.0, 205.0, 55.0), mask)
-            val rate = Core.countNonZero(mask).toDouble() / (roi.cols() * roi.rows())
-            rate > ORANGE_RATE_MIN
-        } catch (e: Exception) {
-            false
-        } finally {
-            roi.release()
-            rgb.release()
-            mask.release()
-        }
-    }
+    /** 对话判定沿用原版：仅以对话历史图标（TalkHistory 模板）命中为准。 */
+    private fun inDialogue(content: CaptureContent): Boolean = isDialogueScene(content, assets)
 
     /**
      * 关键词决策（对齐 PC 版 ChatOptionChoose）：
-     * 焦点选项在最低（Y 最大）；OCR 固定宽度区域读文字；
-     * pause 过滤 → select 命中点文字行 → 橙色关键选项 → 兜底点最低。
+     * 以最下方气泡为基准做固定宽度 OCR；按 Y 排序后过滤空文本、短英文数字、
+     * 以及与下一行 Y 间距过大的行；再按 select > pause > default_pause > 兜底最低项决策。
      */
     private fun decideOption(
         content: CaptureContent,
         hits: List<Region>,
-        settings: TriggerSettings,
     ): Decision? {
         if (hits.isEmpty()) return null
         val region = content.captureRectArea
@@ -321,16 +217,25 @@ class AutoSkipFeature(
         ro.regionOfInterest = IntRect(ocrLeft, ocrTop, ocrWidth, ocrHeight)
         val lines = region.findMulti(ro)
 
-        val rs = lines
-            .filter { line ->
-                val t = line.text ?: return@filter false
-                if (t.isBlank()) return@filter false
-                if (t.length < 5 && t.all { it in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ." }) {
-                    return@filter false
-                }
-                true
+        // 先按 Y 坐标排序，再按 PC 的顺序逐项过滤（含相邻行间距检查）
+        val sorted = lines.sortedBy { it.y }
+        val maxYGap = (OPTION_MAX_Y_GAP * scale).toInt()
+        val rs = sorted.filterIndexed { index, line ->
+            val t = line.text ?: return@filterIndexed false
+            if (t.isBlank()) return@filterIndexed false
+            if (t.length < 5 && t.all { it in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ." }) {
+                return@filterIndexed false
             }
-            .sortedBy { it.y }
+            // 对齐 PC：与下一行 Y 间距过大时，当前行不属于同一组选项，直接丢弃
+            if (index != sorted.size - 1) {
+                val gap = sorted[index + 1].y - line.y
+                if (gap > maxYGap) {
+                    events?.onAutoSkipLog("Y 轴偏差过大，忽略：$t")
+                    return@filterIndexed false
+                }
+            }
+            true
+        }
         if (rs.isEmpty()) return Decision(lowest)
 
         events?.onOptionTextsRecognized(rs.mapNotNull { it.text })
@@ -349,13 +254,6 @@ class AutoSkipFeature(
         }
         for (item in rs) {
             val t = item.text ?: continue
-            if (settings.orangeOptionEnabled && isOrangeOption(region, item)) {
-                events?.onAutoSkipLog("橙色关键选项：$t")
-                return Decision(item)
-            }
-        }
-        for (item in rs) {
-            val t = item.text ?: continue
             if (optionKeywords.defaultPause.any { t.contains(it) }) {
                 events?.onAutoSkipLog("命中默认暂停词，等待手动选择：$t")
                 return null
@@ -370,20 +268,15 @@ class AutoSkipFeature(
         private const val TAG = "BetterGI.AutoSkip"
         private const val CONFIRM_WINDOW_MS = 600L
         private const val CONFIRM_TIMEOUT_MS = 1200L
-        private const val OCR_CHECK_INTERVAL_MS = 1500L
         private const val OPTION_DECISION_INTERVAL_MS = 1000L
+
+        /** 相邻选项行 Y 间距上限（1080p 基准，对齐 PC 的 150）。 */
+        private const val OPTION_MAX_Y_GAP = 150
         private const val BLACK_CLICK_INTERVAL_MS = 1200L
         private const val BLACK_RATE_MIN = 0.5
         private const val BLACK_RATE_MAX = 0.98999
         private const val IDLE_LOG_INTERVAL_MS = 5000L
-        private const val ORANGE_RATE_MIN = 0.06
-        private const val FOREGROUND_CHECK_INTERVAL_MS = 500L
-        private const val FOREGROUND_MISS_LOG_INTERVAL_MS = 5000L
         private const val SKIP_LOG_INTERVAL_MS = 5000L
-        private const val DIALOGUE_EXIT_CONFIRM_COUNT = 2
-        private const val DIALOGUE_TEXT_MIN_LEN = 6
-        private const val DIALOGUE_TEXT_MAX_LINES = 4
-        private const val CHAT_ICON_CHECK_INTERVAL_MS = 500L
 
         fun selectTopChatIcon(hits: List<Region>): Region? = hits.minByOrNull { it.y }
     }

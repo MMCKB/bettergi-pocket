@@ -55,16 +55,6 @@
       "search": {
         "box": "rect(900, 90, 1000, 950)"
       }
-    },
-    "DialogueText": {
-      "type": "Ocr",
-      "reference": {
-        "size": [
-          3040,
-          1904
-        ],
-        "bbox": "rect(400, 1150, 1800, 300)"
-      }
     }
   }
 }

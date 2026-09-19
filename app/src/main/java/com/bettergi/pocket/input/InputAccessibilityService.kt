@@ -39,9 +39,12 @@ class InputAccessibilityService : AccessibilityService() {
         if (event == null) return
         when (event.eventType) {
             AccessibilityEvent.TYPE_TOUCH_INTERACTION_START -> {
+                userTouchingLocally = true
                 broadcastTouchState(true)
             }
             AccessibilityEvent.TYPE_TOUCH_INTERACTION_END -> {
+                userTouchingLocally = false
+                lastTouchEndAtMs = SystemClock.elapsedRealtime()
                 broadcastTouchState(false)
             }
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
@@ -81,6 +84,9 @@ class InputAccessibilityService : AccessibilityService() {
         const val ACTION_STATE_CHANGED = "com.bettergi.pocket.action.ACCESSIBILITY_CHANGED"
         const val ACTION_TOUCH_STATE = "com.bettergi.pocket.action.TOUCH_STATE"
         const val EXTRA_TOUCHING = "touching"
+
+        /** 手指抬起后继续避让的时间，避免刚抬手就被点击打断。 */
+        private const val TOUCH_GRACE_MS = 150L
         private const val AUTHORITY_SUFFIX = ".a11y"
         private const val METHOD_STATUS = "status"
         private const val METHOD_CLICK = "click"
@@ -99,6 +105,14 @@ class InputAccessibilityService : AccessibilityService() {
 
         @Volatile
         private var lastAppPackage: String? = null
+
+        /** 手指是否按在屏幕上（本进程判断，点击注入前零延迟检查）。 */
+        @Volatile
+        private var userTouchingLocally = false
+
+        /** 手指最后一次离开屏幕的时间（elapsedRealtime）。 */
+        @Volatile
+        private var lastTouchEndAtMs = 0L
 
         @Volatile
         private var appContext: Context? = null
@@ -125,40 +139,10 @@ class InputAccessibilityService : AccessibilityService() {
 
         /** `true`/`false` 表示原神是否在前台；无障碍未连接或尚未观察到窗口时为 `null`。 */
         fun isGenshinInForeground(): Boolean? {
-            val name = foregroundPackage() ?: return null
-            return GenshinPackages.isGenshinPackage(name)
-        }
-
-        /** 当前前台包名：优先无障碍实时窗口，回退窗口变化事件缓存；服务未连接返回 null。 */
-        fun foregroundPackage(): String? {
-            val service = instance
-            if (service != null) {
-                liveWindowPackage(service)?.let { return it }
-                return lastAppPackage
-            }
             val (connected, pkg) = currentStatus()
-            return if (connected) pkg else null
-        }
-
-        /** 读取真正获得焦点的窗口包名，避免被瞬态弹窗/通知/游戏助手顶掉缓存。 */
-        private fun liveWindowPackage(service: AccessibilityService): String? {
-            val windows = try {
-                service.windows
-            } catch (_: Exception) {
-                null
-            } ?: return null
-            val active = windows.firstOrNull { it.isFocused }
-                ?: windows.firstOrNull { it.isActive }
-                ?: return null
-            val name = try {
-                active.root?.packageName?.toString()
-            } catch (_: Exception) {
-                null
-            } ?: return null
-            if (name.isBlank()) return null
-            // 焦点落在通知栏/系统弹窗等瞬态窗口时不作为前台依据，交给事件缓存判断
-            if (name == service.packageName || name in TRANSIENT_PACKAGES) return null
-            return name
+            if (!connected) return null
+            val name = pkg ?: return null
+            return GenshinPackages.isGenshinPackage(name)
         }
 
         fun isEnabledInSettings(context: Context): Boolean {
@@ -289,6 +273,14 @@ class InputAccessibilityService : AccessibilityService() {
 
         private fun clickLocal(x: Int, y: Int, durationMs: Long): Boolean {
             val service = instance ?: return false
+            if (userTouchingLocally) {
+                Log.i(TAG, "skip click: user is touching the screen")
+                return false
+            }
+            if (SystemClock.elapsedRealtime() - lastTouchEndAtMs < TOUCH_GRACE_MS) {
+                Log.i(TAG, "skip click: within touch grace period")
+                return false
+            }
             val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
             val stroke = GestureDescription.StrokeDescription(path, 0, durationMs.coerceAtLeast(1L))
             val gesture = GestureDescription.Builder().addStroke(stroke).build()

@@ -13,6 +13,7 @@ import com.bettergi.pocket.overlay.OverlayWindowController
 class AccessibilityAutomationController(
     private val context: Context,
     private val overlayController: OverlayWindowController,
+    private val logger: (String) -> Unit = {},
 ) : AutomationController {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val restorePassthrough = Runnable { overlayController.restoreClickPassthrough() }
@@ -21,12 +22,28 @@ class AccessibilityAutomationController(
     @Volatile
     private var userTouching = false
 
+    /** 触摸期间被跳过的点击次数（恢复时汇总输出，避免日志刷屏）。 */
+    @Volatile
+    private var skippedClicks = 0
+
     private val touchReceiver = object : BroadcastReceiver() {
         override fun onReceive(receiverContext: Context?, intent: Intent?) {
-            userTouching = intent?.getBooleanExtra(
+            val touching = intent?.getBooleanExtra(
                 InputAccessibilityService.EXTRA_TOUCHING,
                 false,
             ) ?: false
+            if (touching == userTouching) return
+            userTouching = touching
+            if (touching) {
+                skippedClicks = 0
+                logger("检测到手指触摸，暂停自动点击")
+            } else {
+                val skipped = skippedClicks
+                logger(
+                    if (skipped > 0) "触摸结束，恢复自动点击（期间跳过 ${skipped} 次）"
+                    else "触摸结束，恢复自动点击",
+                )
+            }
         }
     }
 
@@ -52,11 +69,15 @@ class AccessibilityAutomationController(
             return
         }
         if (userTouching) {
+            skippedClicks++
             Log.i(TAG, "skip click while user is touching at ${action.x},${action.y}")
             return
         }
         mainHandler.post {
-            if (userTouching) return@post
+            if (userTouching) {
+                skippedClicks++
+                return@post
+            }
             val needPassthrough = overlayController.prepareClickPassthrough(action.x, action.y)
             val dispatched = InputAccessibilityService.click(action.x, action.y, action.durationMs)
             if (!dispatched) {
