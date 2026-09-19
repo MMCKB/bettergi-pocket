@@ -94,6 +94,7 @@ class TriggerForegroundService : Service() {
                     overlayController,
                     OptionKeywords.load(applicationContext.assets),
                     isGenshinForeground = { InputAccessibilityService.isGenshinInForeground() == true },
+                    foregroundPackageName = { InputAccessibilityService.foregroundPackage() },
                 ),
             ),
             actionController = AccessibilityAutomationController(applicationContext, overlayController),

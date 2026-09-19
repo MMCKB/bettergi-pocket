@@ -15,5 +15,4 @@
     <color name="overlay_status_off">#FFB8A48A</color>
     <color name="overlay_status_warn">#FFE8A45A</color>
     <color name="overlay_log_green">#FF7CFF9A</color>
-    <color name="overlay_bilibili">#FFFB7299</color>
 </resources>

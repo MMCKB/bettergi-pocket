@@ -29,6 +29,7 @@ class AutoSkipFeature(
     private val events: AutoSkipEvents? = null,
     private val optionKeywords: OptionKeywords = OptionKeywords(),
     private val isGenshinForeground: () -> Boolean = { true },
+    private val foregroundPackageName: () -> String? = { null },
 ) : TriggerFeature {
 
     override val key: String = "AutoSkip"
@@ -75,6 +76,9 @@ class AutoSkipFeature(
 
     @Volatile
     private var lastForegroundResult: Boolean = true
+
+    @Volatile
+    private var lastForegroundMissLogMs: Long = 0L
 
     @Volatile
     private var lastSkipLogMs: Long = 0L
@@ -214,12 +218,16 @@ class AutoSkipFeature(
         }
     }
 
-    /** 原神是否在前台（节流查询，避免每拍跨进程调用）。 */
+    /** 原神是否在前台（节流查询，避免每拍跨进程调用）；未命中时记录实际前台包名便于排查。 */
     private fun foregroundOk(): Boolean {
         val now = System.currentTimeMillis()
         if (now - lastForegroundCheckMs < FOREGROUND_CHECK_INTERVAL_MS) return lastForegroundResult
         lastForegroundCheckMs = now
         lastForegroundResult = isGenshinForeground()
+        if (!lastForegroundResult && now - lastForegroundMissLogMs >= FOREGROUND_MISS_LOG_INTERVAL_MS) {
+            lastForegroundMissLogMs = now
+            events?.onAutoSkipLog("非原神前台，暂停自动对话（当前：${foregroundPackageName() ?: "未知"}）")
+        }
         return lastForegroundResult
     }
 
@@ -327,31 +335,34 @@ class AutoSkipFeature(
 
         events?.onOptionTextsRecognized(rs.mapNotNull { it.text })
 
-        // pause 词只过滤对应选项，不整体停；全部被过滤时兜底点最低，避免对话卡死
-        val clickable = rs.filter { item ->
-            val t = item.text ?: return@filter true
-            !optionKeywords.pause.any { t.contains(it) }
-        }
-        if (clickable.isEmpty()) {
-            events?.onAutoSkipLog("全部选项命中暂停词，点最低项")
-            return Decision(rs.last())
-        }
-        for (item in clickable) {
+        // 对齐 PC 版优先级：同一遍历内 select 先于 pause；命中 pause 本拍不点击（交用户手动选）
+        for (item in rs) {
             val t = item.text ?: continue
             if (optionKeywords.select.any { t.contains(it) }) {
-                events?.onAutoSkipLog("关键词命中：$t")
+                events?.onAutoSkipLog("主动选择命中：$t")
                 return Decision(item)
             }
+            if (optionKeywords.pause.any { t.contains(it) }) {
+                events?.onAutoSkipLog("命中暂停词，等待手动选择：$t")
+                return null
+            }
         }
-        for (item in clickable) {
+        for (item in rs) {
             val t = item.text ?: continue
             if (settings.orangeOptionEnabled && isOrangeOption(region, item)) {
                 events?.onAutoSkipLog("橙色关键选项：$t")
                 return Decision(item)
             }
         }
+        for (item in rs) {
+            val t = item.text ?: continue
+            if (optionKeywords.defaultPause.any { t.contains(it) }) {
+                events?.onAutoSkipLog("命中默认暂停词，等待手动选择：$t")
+                return null
+            }
+        }
         events?.onAutoSkipLog("无关键词命中，点最低选项")
-        return Decision(clickable.last())
+        return Decision(rs.last())
     }
 
     companion object {
@@ -367,6 +378,7 @@ class AutoSkipFeature(
         private const val IDLE_LOG_INTERVAL_MS = 5000L
         private const val ORANGE_RATE_MIN = 0.06
         private const val FOREGROUND_CHECK_INTERVAL_MS = 500L
+        private const val FOREGROUND_MISS_LOG_INTERVAL_MS = 5000L
         private const val SKIP_LOG_INTERVAL_MS = 5000L
         private const val DIALOGUE_EXIT_CONFIRM_COUNT = 2
         private const val DIALOGUE_TEXT_MIN_LEN = 6

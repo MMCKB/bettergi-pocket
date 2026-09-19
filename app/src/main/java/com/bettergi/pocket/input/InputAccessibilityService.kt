@@ -44,7 +44,8 @@ class InputAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_TOUCH_INTERACTION_END -> {
                 broadcastTouchState(false)
             }
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+            AccessibilityEvent.TYPE_WINDOW_FOCUS_CHANGED -> {
                 val pkg = event.packageName?.toString() ?: return
                 if (pkg == packageName || pkg in TRANSIENT_PACKAGES) return
                 lastAppPackage = pkg
@@ -124,10 +125,40 @@ class InputAccessibilityService : AccessibilityService() {
 
         /** `true`/`false` 表示原神是否在前台；无障碍未连接或尚未观察到窗口时为 `null`。 */
         fun isGenshinInForeground(): Boolean? {
-            val (connected, pkg) = currentStatus()
-            if (!connected) return null
-            val name = pkg ?: return null
+            val name = foregroundPackage() ?: return null
             return GenshinPackages.isGenshinPackage(name)
+        }
+
+        /** 当前前台包名：优先无障碍实时窗口，回退窗口变化事件缓存；服务未连接返回 null。 */
+        fun foregroundPackage(): String? {
+            val service = instance
+            if (service != null) {
+                liveWindowPackage(service)?.let { return it }
+                return lastAppPackage
+            }
+            val (connected, pkg) = currentStatus()
+            return if (connected) pkg else null
+        }
+
+        /** 读取真正获得焦点的窗口包名，避免被瞬态弹窗/通知/游戏助手顶掉缓存。 */
+        private fun liveWindowPackage(service: AccessibilityService): String? {
+            val windows = try {
+                service.windows
+            } catch (_: Exception) {
+                null
+            } ?: return null
+            val active = windows.firstOrNull { it.isFocused }
+                ?: windows.firstOrNull { it.isActive }
+                ?: return null
+            val name = try {
+                active.root?.packageName?.toString()
+            } catch (_: Exception) {
+                null
+            } ?: return null
+            if (name.isBlank()) return null
+            // 焦点落在通知栏/系统弹窗等瞬态窗口时不作为前台依据，交给事件缓存判断
+            if (name == service.packageName || name in TRANSIENT_PACKAGES) return null
+            return name
         }
 
         fun isEnabledInSettings(context: Context): Boolean {

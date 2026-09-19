@@ -37,7 +37,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.widget.ImageViewCompat
 import com.bettergi.pocket.R
-import com.bettergi.pocket.bilibili.BilibiliSpaceOpener
 import com.bettergi.pocket.feature.autopick.AutoPickFeature
 import com.bettergi.pocket.feature.autoskip.AutoSkipEvents
 import com.bettergi.pocket.genshin.GenshinLaunchResult
@@ -270,10 +269,6 @@ class OverlayWindowController(
         rowAutoSkip?.setOnClickListener { setAutoSkipMenuExpanded(!autoSkipMenuExpanded) }
         rowLaunch?.setOnClickListener { setLaunchMenuExpanded(!launchMenuExpanded) }
         root.findViewById<View>(R.id.overlay_launch).setOnClickListener { launchGenshinFromButton() }
-        root.findViewById<ImageButton>(R.id.overlay_bilibili).also { button ->
-            ImageViewCompat.setImageTintList(button, null)
-            button.setOnClickListener { openBilibiliSpace() }
-        }
         root.findViewById<View>(R.id.overlay_exit).setOnClickListener { exitAssistant() }
 
         enabledSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -467,11 +462,6 @@ class OverlayWindowController(
             pendingCollapseOnOutside = true
             return
         }
-        setExpanded(false)
-    }
-
-    private fun openBilibiliSpace() {
-        BilibiliSpaceOpener(themedContext).open()
         setExpanded(false)
     }
 
