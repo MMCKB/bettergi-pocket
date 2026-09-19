@@ -239,14 +239,6 @@ class OverlayWindowController(
         }
         setupDrag(header, layoutParams, snapOnRelease = false)
         collapse.setOnClickListener { setExpanded(false) }
-        root.setOnTouchListener { _, event ->
-            if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) {
-                collapseOnOutsideTouch()
-                true
-            } else {
-                false
-            }
-        }
         logToggle.setOnClickListener { setLogWindowVisible(!logWindowVisible) }
         rowAutoSkip?.setOnClickListener { setAutoSkipMenuExpanded(!autoSkipMenuExpanded) }
         rowLaunch?.setOnClickListener { setLaunchMenuExpanded(!launchMenuExpanded) }
@@ -599,6 +591,29 @@ class OverlayWindowController(
         appendLog("点击对话选项 ($x, $y)")
     }
 
+    override fun onAutoSkipLog(message: String) {
+        appendLog(message)
+    }
+
+    override fun onBlackScreenClicked(x: Int, y: Int) {
+        appendLog("点击黑屏转场 ($x, $y)")
+    }
+
+    override fun onOptionTextsRecognized(texts: List<String>) {
+        if (texts.isNotEmpty()) {
+            appendLog("选项文字：${texts.joinToString("、")}")
+        }
+    }
+
+    override fun onPauseBlocked(text: String) {
+        appendLog("跳过选项：$text")
+    }
+
+    override fun onIdleScan() {
+        appendLog("扫描中，未检测到对话…")
+    }
+
+
     private fun appendLog(message: String) {
         mainHandler.post {
             if (!logWindowVisible || logText == null) return@post
@@ -608,7 +623,12 @@ class OverlayWindowController(
             }
             logLines.addLast(line)
             logText?.text = logLines.joinToString("\n")
-            logScroll?.post { logScroll?.fullScroll(View.FOCUS_DOWN) }
+            val scroll = logScroll ?: return@post
+            val child = scroll.getChildAt(0) ?: return@post
+            val atBottom = scroll.scrollY >= child.height - scroll.height - 4
+            if (atBottom) {
+                scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+            }
         }
     }
 
@@ -745,7 +765,7 @@ class OverlayWindowController(
         val bodyParams = overlayParams(
             width = width,
             height = WindowManager.LayoutParams.WRAP_CONTENT,
-            touchable = false,
+            touchable = true,
             x = x,
             y = y + dp(28),
         )

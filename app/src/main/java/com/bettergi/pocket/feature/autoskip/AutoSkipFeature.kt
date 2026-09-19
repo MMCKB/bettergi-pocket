@@ -52,6 +52,9 @@ class AutoSkipFeature(
     @Volatile
     private var lastBlackClickMs: Long = 0L
 
+    @Volatile
+    private var lastIdleLogMs: Long = 0L
+
     override fun isEnabled(settings: TriggerSettings): Boolean =
         settings.screenShareEnabled && settings.autoSkipEnabled
 
@@ -66,6 +69,11 @@ class AutoSkipFeature(
                     return
                 }
                 if (settings.blackScreenClickEnabled) clickBlackScreenIfNeeded(content, actions)
+                val idleNow = System.currentTimeMillis()
+                if (idleNow - lastIdleLogMs >= IDLE_LOG_INTERVAL_MS) {
+                    lastIdleLogMs = idleNow
+                    events?.onIdleScan()
+                }
             }
 
             State.IN_DIALOG -> {
@@ -90,6 +98,7 @@ class AutoSkipFeature(
                 if (settings.smartOptionEnabled && excls.isNotEmpty()) {
                     val (x, y) = excls[0].centerOnNativeCapture()
                     Log.i(TAG, "click exclamation option at $x,$y")
+                    events?.onAutoSkipLog("点击感叹号选项 ($x, $y)")
                     actions.emit(ClickAction(x, y))
                     events?.onChatIconClicked(x, y)
                     clickedOptionY = excls[0].y
@@ -163,6 +172,7 @@ class AutoSkipFeature(
             val rate = black / (roi.cols() * roi.rows())
             if (rate >= BLACK_RATE_MIN && rate < BLACK_RATE_MAX) {
                 Log.i(TAG, "black transition detected, rate=$rate, click center")
+                events?.onBlackScreenClicked(w / 2, h / 2)
                 actions.emit(ClickAction(w / 2, h / 2))
                 lastBlackClickMs = now
             }
@@ -218,14 +228,23 @@ class AutoSkipFeature(
             .sortedBy { it.y }
         if (rs.isEmpty()) return lowest
 
+        events?.onOptionTextsRecognized(rs.mapNotNull { it.text })
+
         for (item in rs) {
             val t = item.text ?: continue
-            if (optionKeywords.pause.any { t.contains(it) }) return null
+            if (optionKeywords.pause.any { t.contains(it) }) {
+                events?.onPauseBlocked(t)
+                return null
+            }
         }
         for (item in rs) {
             val t = item.text ?: continue
-            if (optionKeywords.select.any { t.contains(it) }) return item
+            if (optionKeywords.select.any { t.contains(it) }) {
+                events?.onAutoSkipLog("关键词命中：$t")
+                return item
+            }
         }
+        events?.onAutoSkipLog("无关键词命中，点最低选项")
         return rs.last()
     }
 
@@ -239,6 +258,7 @@ class AutoSkipFeature(
         private const val BLACK_CLICK_INTERVAL_MS = 1200L
         private const val BLACK_RATE_MIN = 0.5
         private const val BLACK_RATE_MAX = 0.98999
+        private const val IDLE_LOG_INTERVAL_MS = 5000L
 
         fun selectTopChatIcon(hits: List<Region>): Region? = hits.minByOrNull { it.y }
     }
