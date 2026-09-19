@@ -102,6 +102,12 @@ class OverlayWindowController(
     private var switchSmartOption: SwitchCompat? = null
     private var switchBlackScreen: SwitchCompat? = null
     private var switchTapIndicator: SwitchCompat? = null
+    private var switchExclamation: SwitchCompat? = null
+    private var rowExclamation: View? = null
+    private var switchOrange: SwitchCompat? = null
+    private var rowOrange: View? = null
+    private var switchForeground: SwitchCompat? = null
+    private var rowForeground: View? = null
     private var rowTapIndicator: View? = null
     private val hideTapIndicator = Runnable { tapIndicatorView?.visibility = View.GONE }
     private var tapIndicatorView: View? = null
@@ -159,6 +165,9 @@ class OverlayWindowController(
             switchSmartOption?.isChecked = settings.smartOptionEnabled
             switchBlackScreen?.isChecked = settings.blackScreenClickEnabled
             switchTapIndicator?.isChecked = settings.showTapIndicator
+            switchExclamation?.isChecked = settings.exclamationClickEnabled
+            switchOrange?.isChecked = settings.orangeOptionEnabled
+                    switchForeground?.isChecked = settings.genshinForegroundOnly
             switchAutoPick?.isChecked = settings.autoPickEnabled
             switchAutoLaunch?.isChecked = settings.autoLaunchGenshinEnabled
             applyFeatureEnabled(settings)
@@ -184,6 +193,9 @@ class OverlayWindowController(
         val smartOptionSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_smart_option)
         val blackScreenSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_black_screen)
         val tapIndicatorSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_tap_indicator)
+        val exclamationSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_exclamation)
+        val orangeSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_orange)
+        val foregroundSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_foreground)
         val autoPickSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_auto_pick)
         val autoLaunchSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_auto_launch)
         val logToggle = root.findViewById<ImageButton>(R.id.overlay_log_toggle)
@@ -205,6 +217,9 @@ class OverlayWindowController(
         switchSmartOption = smartOptionSwitch
         switchBlackScreen = blackScreenSwitch
         switchTapIndicator = tapIndicatorSwitch
+        switchExclamation = exclamationSwitch
+        switchOrange = orangeSwitch
+        switchForeground = foregroundSwitch
         switchAutoPick = autoPickSwitch
         switchAutoLaunch = autoLaunchSwitch
         launchHint = root.findViewById(R.id.overlay_auto_launch_hint)
@@ -215,6 +230,9 @@ class OverlayWindowController(
         rowSmartOption = root.findViewById(R.id.overlay_row_smart_option)
         rowBlackScreen = root.findViewById(R.id.overlay_row_black_screen)
         rowTapIndicator = root.findViewById(R.id.overlay_row_tap_indicator)
+        rowExclamation = root.findViewById(R.id.overlay_row_exclamation)
+        rowOrange = root.findViewById(R.id.overlay_row_orange)
+        rowForeground = root.findViewById(R.id.overlay_row_foreground)
         rowLaunch = root.findViewById(R.id.overlay_row_launch)
         rowAutoPick = root.findViewById<View>(R.id.overlay_row_auto_pick).also { row ->
             row.visibility = if (AutoPickFeature.AVAILABLE) View.VISIBLE else View.GONE
@@ -284,6 +302,18 @@ class OverlayWindowController(
         tapIndicatorSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (updatingUi) return@setOnCheckedChangeListener
             settingsRepository.setShowTapIndicator(isChecked)
+        }
+        exclamationSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (updatingUi) return@setOnCheckedChangeListener
+            settingsRepository.setExclamationClickEnabled(isChecked)
+        }
+        orangeSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (updatingUi) return@setOnCheckedChangeListener
+            settingsRepository.setOrangeOptionEnabled(isChecked)
+        }
+        foregroundSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (updatingUi) return@setOnCheckedChangeListener
+            settingsRepository.setGenshinForegroundOnly(isChecked)
         }
         autoPickSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (updatingUi) return@setOnCheckedChangeListener
@@ -407,6 +437,12 @@ class OverlayWindowController(
         switchBlackScreen = null
         switchTapIndicator = null
         rowTapIndicator = null
+        switchExclamation = null
+        rowExclamation = null
+        switchOrange = null
+        rowOrange = null
+        switchForeground = null
+        rowForeground = null
         releaseTapIndicator()
         switchAutoPick = null
         switchAutoLaunch = null
@@ -584,12 +620,18 @@ class OverlayWindowController(
         switchSmartOption?.isEnabled = autoSkipOn
         switchBlackScreen?.isEnabled = autoSkipOn
         switchTapIndicator?.isEnabled = shareOn
+        switchExclamation?.isEnabled = autoSkipOn
+        switchOrange?.isEnabled = autoSkipOn
+        switchForeground?.isEnabled = autoSkipOn
         rowAutoSkip?.alpha = if (shareOn) 1f else 0.45f
         rowAutoPick?.alpha = if (shareOn) 1f else 0.45f
         rowQuickSkip?.alpha = if (autoSkipOn) 1f else 0.45f
         rowSmartOption?.alpha = if (autoSkipOn) 1f else 0.45f
         rowBlackScreen?.alpha = if (autoSkipOn) 1f else 0.45f
         rowTapIndicator?.alpha = if (shareOn) 1f else 0.45f
+        rowExclamation?.alpha = if (autoSkipOn) 1f else 0.45f
+        rowOrange?.alpha = if (autoSkipOn) 1f else 0.45f
+        rowForeground?.alpha = if (autoSkipOn) 1f else 0.45f
     }
 
     override fun onTalkHistoryMatched() {

@@ -89,7 +89,12 @@ class TriggerForegroundService : Service() {
             captureController = captureController,
             features = listOf(
                 AutoPickFeature(),
-                AutoSkipFeature(recognitionAssets, overlayController, OptionKeywords.load(applicationContext.assets)),
+                AutoSkipFeature(
+                    recognitionAssets,
+                    overlayController,
+                    OptionKeywords.load(applicationContext.assets),
+                    isGenshinForeground = { InputAccessibilityService.isGenshinInForeground() == true },
+                ),
             ),
             actionController = AccessibilityAutomationController(applicationContext, overlayController),
         )

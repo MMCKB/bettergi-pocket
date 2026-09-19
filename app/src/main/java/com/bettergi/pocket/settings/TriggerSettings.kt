@@ -9,4 +9,7 @@ data class TriggerSettings(
     val smartOptionEnabled: Boolean = true,
     val blackScreenClickEnabled: Boolean = true,
     val showTapIndicator: Boolean = false,
+    val exclamationClickEnabled: Boolean = true,
+    val orangeOptionEnabled: Boolean = true,
+    val genshinForegroundOnly: Boolean = true,
 )

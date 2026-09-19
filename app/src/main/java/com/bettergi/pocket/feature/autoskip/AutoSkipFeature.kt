@@ -2,7 +2,6 @@ package com.bettergi.pocket.feature.autoskip
 
 import android.util.Log
 import com.bettergi.pocket.input.ActionEmitter
-import com.bettergi.pocket.input.BackAction
 import com.bettergi.pocket.input.ClickAction
 import com.bettergi.pocket.recognition.CaptureContent
 import com.bettergi.pocket.recognition.IntRect
@@ -22,22 +21,21 @@ import org.opencv.imgproc.Imgproc
 
 /**
  * 自动对话（移植 PC 版 AutoSkip 核心，去掉语音/弹窗/邀约）：
- * 感叹号优先、选项 OCR + 关键词决策、橙色选项（每日委托/探索派遣）、
+ * 感叹号优先、选项 OCR + 关键词决策、橙色关键选项、
  * 状态机 + 点击确认、黑屏转场点击。
  */
 class AutoSkipFeature(
     private val assets: RecognitionAssets,
     private val events: AutoSkipEvents? = null,
     private val optionKeywords: OptionKeywords = OptionKeywords(),
+    private val isGenshinForeground: () -> Boolean = { true },
 ) : TriggerFeature {
 
     override val key: String = "AutoSkip"
 
-    private enum class State { IDLE, IN_DIALOG, CONFIRMING, DAILY_CONFIRM, EXPEDITION }
+    private enum class State { IDLE, IN_DIALOG, CONFIRMING }
 
-    private enum class PostAction { NONE, DAILY_REWARDS, EXPEDITION }
-
-    private data class Decision(val region: Region, val action: PostAction = PostAction.NONE)
+    private data class Decision(val region: Region)
 
     @Volatile
     private var state = State.IDLE
@@ -55,6 +53,15 @@ class AutoSkipFeature(
     private var lastOcrDialogueHit: Boolean = false
 
     @Volatile
+    private var dialogueMissStreak: Int = 0
+
+    @Volatile
+    private var lastChatIconCheckMs: Long = 0L
+
+    @Volatile
+    private var lastChatIconHit: Boolean = false
+
+    @Volatile
     private var lastOptionDecisionAtMs: Long = 0L
 
     @Volatile
@@ -64,19 +71,20 @@ class AutoSkipFeature(
     private var lastIdleLogMs: Long = 0L
 
     @Volatile
-    private var actionStartMs: Long = 0L
+    private var lastForegroundCheckMs: Long = 0L
 
     @Volatile
-    private var phaseStartMs: Long = 0L
+    private var lastForegroundResult: Boolean = true
 
     @Volatile
-    private var expeditionPhase: Int = 0
+    private var lastSkipLogMs: Long = 0L
 
     override fun isEnabled(settings: TriggerSettings): Boolean =
         settings.screenShareEnabled && settings.autoSkipEnabled
 
     override fun onTick(tick: FeatureTick, settings: TriggerSettings, actions: ActionEmitter) {
         val content = tick.content ?: return
+        if (settings.genshinForegroundOnly && !foregroundOk()) return
 
         when (state) {
             State.IDLE -> {
@@ -102,6 +110,11 @@ class AutoSkipFeature(
 
                 if (settings.quickSkipDialogueEnabled) {
                     val (skipX, skipY) = screenBottomCenter(tick.screenWidth, tick.screenHeight)
+                    val skipNow = System.currentTimeMillis()
+                    if (skipNow - lastSkipLogMs >= SKIP_LOG_INTERVAL_MS) {
+                        lastSkipLogMs = skipNow
+                        events?.onAutoSkipLog("点击跳过 ($skipX, $skipY)")
+                    }
                     actions.emit(ClickAction(skipX, skipY))
                 }
 
@@ -112,7 +125,7 @@ class AutoSkipFeature(
                 val excls = content.findMulti(
                     assets.get(TASK_NAME, "ExclamationIcon", content.captureRectArea),
                 )
-                if (settings.smartOptionEnabled && excls.isNotEmpty()) {
+                if (settings.smartOptionEnabled && settings.exclamationClickEnabled && excls.isNotEmpty()) {
                     val (x, y) = excls[0].centerOnNativeCapture()
                     Log.i(TAG, "click exclamation option at $x,$y")
                     events?.onAutoSkipLog("点击感叹号选项 ($x, $y)")
@@ -131,7 +144,7 @@ class AutoSkipFeature(
                 val chatIcon = assets.get(TASK_NAME, "ChatIcon", content.captureRectArea)
                 val hits = content.findMulti(chatIcon)
                 val decision = if (settings.smartOptionEnabled) {
-                    decideOption(content, hits)
+                    decideOption(content, hits, settings)
                 } else {
                     selectTopChatIcon(hits)?.let { Decision(it) }
                 } ?: return
@@ -144,14 +157,7 @@ class AutoSkipFeature(
                 events?.onChatIconClicked(topX, topY)
                 clickedOptionY = target.y
                 clickedAtMs = now
-                actionStartMs = now
-                phaseStartMs = 0L
-                expeditionPhase = 0
-                state = when (decision.action) {
-                    PostAction.DAILY_REWARDS -> State.DAILY_CONFIRM
-                    PostAction.EXPEDITION -> State.EXPEDITION
-                    PostAction.NONE -> State.CONFIRMING
-                }
+                state = State.CONFIRMING
             }
 
             State.CONFIRMING -> {
@@ -177,93 +183,6 @@ class AutoSkipFeature(
                 }
             }
 
-            State.DAILY_CONFIRM -> {
-                val now = System.currentTimeMillis()
-                val elapsed = now - actionStartMs
-                if (elapsed > DAILY_CONFIRM_TIMEOUT_MS) {
-                    Log.w(TAG, "daily confirm timeout")
-                    events?.onAutoSkipLog("每日委托：确认超时")
-                    state = State.IN_DIALOG
-                    clickedOptionY = -1
-                    return
-                }
-                if (elapsed < DAILY_CONFIRM_DELAY_MS) return
-                val confirm = content.find(
-                    assets.get(TASK_NAME, "BtnBlackConfirm", content.captureRectArea),
-                )
-                if (confirm.isExist()) {
-                    val (cx, cy) = confirm.centerOnNativeCapture()
-                    events?.onAutoSkipLog("每日委托：点击确认 ($cx, $cy)")
-                    actions.emit(ClickAction(cx, cy))
-                    state = State.IN_DIALOG
-                    clickedOptionY = -1
-                }
-            }
-
-            State.EXPEDITION -> {
-                val now = System.currentTimeMillis()
-                if (now - actionStartMs > EXPEDITION_TOTAL_TIMEOUT_MS) {
-                    Log.w(TAG, "expedition timeout")
-                    events?.onAutoSkipLog("探索派遣：超时退出")
-                    state = State.IN_DIALOG
-                    clickedOptionY = -1
-                    return
-                }
-                when (expeditionPhase) {
-                    0 -> {
-                        if (now - actionStartMs >= EXPEDITION_START_DELAY_MS) {
-                            expeditionPhase = 1
-                            phaseStartMs = now
-                        }
-                    }
-                    1 -> {
-                        val collect = content.find(
-                            assets.get(TASK_NAME, "Collect", content.captureRectArea),
-                        )
-                        if (collect.isExist()) {
-                            val (cx, cy) = collect.centerOnNativeCapture()
-                            events?.onAutoSkipLog("探索派遣：全部领取 ($cx, $cy)")
-                            actions.emit(ClickAction(cx, cy))
-                            expeditionPhase = 2
-                            phaseStartMs = now
-                        } else if (now - phaseStartMs > EXPEDITION_PHASE_TIMEOUT_MS) {
-                            events?.onAutoSkipLog("探索派遣：未找到领取按钮")
-                            expeditionPhase = 4
-                            phaseStartMs = now
-                        }
-                    }
-                    2 -> {
-                        if (now - phaseStartMs >= EXPEDITION_REDISPATCH_DELAY_MS) {
-                            expeditionPhase = 3
-                            phaseStartMs = now
-                        }
-                    }
-                    3 -> {
-                        val re = content.find(
-                            assets.get(TASK_NAME, "Re", content.captureRectArea),
-                        )
-                        if (re.isExist()) {
-                            val (rx, ry) = re.centerOnNativeCapture()
-                            events?.onAutoSkipLog("探索派遣：再次派遣 ($rx, $ry)")
-                            actions.emit(ClickAction(rx, ry))
-                            expeditionPhase = 4
-                            phaseStartMs = now
-                        } else if (now - phaseStartMs > EXPEDITION_PHASE_TIMEOUT_MS) {
-                            events?.onAutoSkipLog("探索派遣：未找到再次派遣")
-                            expeditionPhase = 4
-                            phaseStartMs = now
-                        }
-                    }
-                    else -> {
-                        if (now - phaseStartMs >= EXPEDITION_EXIT_DELAY_MS) {
-                            events?.onAutoSkipLog("探索派遣：完成，返回")
-                            actions.emit(BackAction)
-                            state = State.IN_DIALOG
-                            clickedOptionY = -1
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -295,15 +214,55 @@ class AutoSkipFeature(
         }
     }
 
-    /** 模板快速判定 + OCR 低频判定，任一命中即视为剧情对话中。 */
+    /** 原神是否在前台（节流查询，避免每拍跨进程调用）。 */
+    private fun foregroundOk(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastForegroundCheckMs < FOREGROUND_CHECK_INTERVAL_MS) return lastForegroundResult
+        lastForegroundCheckMs = now
+        lastForegroundResult = isGenshinForeground()
+        return lastForegroundResult
+    }
+
+    /**
+     * 对话判定：
+     * 强信号（历史图标 / 选项气泡）每拍判定；弱信号（OCR 对话文本，带长度行数过滤）仅用于进入；
+     * 连续 MISS 若干拍才判为退出，避免迟滞与闪断。
+     */
     private fun inDialogue(content: CaptureContent, settings: TriggerSettings): Boolean {
-        if (isDialogueScene(content, assets)) return true
-        if (!settings.smartOptionEnabled) return false
+        if (isDialogueScene(content, assets) || hasChatIcons(content)) {
+            dialogueMissStreak = 0
+            return true
+        }
+        if (settings.smartOptionEnabled && ocrDialogueHit(content)) {
+            dialogueMissStreak = 0
+            return true
+        }
+        dialogueMissStreak++
+        return dialogueMissStreak < DIALOGUE_EXIT_CONFIRM_COUNT
+    }
+
+    /** 选项气泡存在属于强对话信号（500ms 缓存）。 */
+    private fun hasChatIcons(content: CaptureContent): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastChatIconCheckMs < CHAT_ICON_CHECK_INTERVAL_MS) return lastChatIconHit
+        lastChatIconCheckMs = now
+        val ro = assets.get(TASK_NAME, "ChatIcon", content.captureRectArea)
+        lastChatIconHit = content.findMulti(ro).isNotEmpty()
+        return lastChatIconHit
+    }
+
+    /** OCR 对话文本判定：需满足最小长度与行数限制，1.5s 节流。 */
+    private fun ocrDialogueHit(content: CaptureContent): Boolean {
         val now = System.currentTimeMillis()
         if (now - lastOcrCheckMs < OCR_CHECK_INTERVAL_MS) return lastOcrDialogueHit
         lastOcrCheckMs = now
         val ro = assets.get(TASK_NAME, "DialogueText", content.captureRectArea)
-        lastOcrDialogueHit = content.find(ro).isExist()
+        val lines = content.findMulti(ro)
+        val text = lines.joinToString("") { it.text ?: "" }
+            .replace(" ", "")
+            .replace("\n", "")
+        lastOcrDialogueHit = text.length >= DIALOGUE_TEXT_MIN_LEN &&
+            lines.size <= DIALOGUE_TEXT_MAX_LINES
         return lastOcrDialogueHit
     }
 
@@ -331,9 +290,13 @@ class AutoSkipFeature(
     /**
      * 关键词决策（对齐 PC 版 ChatOptionChoose）：
      * 焦点选项在最低（Y 最大）；OCR 固定宽度区域读文字；
-     * pause 命中即停 → select 命中点文字行 → 橙色（每日委托/探索派遣）→ 兜底点最低。
+     * pause 过滤 → select 命中点文字行 → 橙色关键选项 → 兜底点最低。
      */
-    private fun decideOption(content: CaptureContent, hits: List<Region>): Decision? {
+    private fun decideOption(
+        content: CaptureContent,
+        hits: List<Region>,
+        settings: TriggerSettings,
+    ): Decision? {
         if (hits.isEmpty()) return null
         val region = content.captureRectArea
         val lowest = hits.maxByOrNull { it.y } ?: return null
@@ -364,41 +327,31 @@ class AutoSkipFeature(
 
         events?.onOptionTextsRecognized(rs.mapNotNull { it.text })
 
-        for (item in rs) {
-            val t = item.text ?: continue
-            if (optionKeywords.pause.any { t.contains(it) }) {
-                events?.onPauseBlocked(t)
-                return null
-            }
+        // pause 词只过滤对应选项，不整体停；全部被过滤时兜底点最低，避免对话卡死
+        val clickable = rs.filter { item ->
+            val t = item.text ?: return@filter true
+            !optionKeywords.pause.any { t.contains(it) }
         }
-        for (item in rs) {
+        if (clickable.isEmpty()) {
+            events?.onAutoSkipLog("全部选项命中暂停词，点最低项")
+            return Decision(rs.last())
+        }
+        for (item in clickable) {
             val t = item.text ?: continue
             if (optionKeywords.select.any { t.contains(it) }) {
                 events?.onAutoSkipLog("关键词命中：$t")
                 return Decision(item)
             }
         }
-        for (item in rs) {
+        for (item in clickable) {
             val t = item.text ?: continue
-            if (isOrangeOption(region, item)) {
-                return when {
-                    t.contains("每日") || t.contains("委托") -> {
-                        events?.onAutoSkipLog("橙色每日委托：$t")
-                        Decision(item, PostAction.DAILY_REWARDS)
-                    }
-                    t.contains("探索") || t.contains("派遣") -> {
-                        events?.onAutoSkipLog("橙色探索派遣：$t")
-                        Decision(item, PostAction.EXPEDITION)
-                    }
-                    else -> {
-                        events?.onAutoSkipLog("橙色关键选项：$t")
-                        Decision(item)
-                    }
-                }
+            if (settings.orangeOptionEnabled && isOrangeOption(region, item)) {
+                events?.onAutoSkipLog("橙色关键选项：$t")
+                return Decision(item)
             }
         }
         events?.onAutoSkipLog("无关键词命中，点最低选项")
-        return Decision(rs.last())
+        return Decision(clickable.last())
     }
 
     companion object {
@@ -413,13 +366,12 @@ class AutoSkipFeature(
         private const val BLACK_RATE_MAX = 0.98999
         private const val IDLE_LOG_INTERVAL_MS = 5000L
         private const val ORANGE_RATE_MIN = 0.06
-        private const val DAILY_CONFIRM_DELAY_MS = 800L
-        private const val DAILY_CONFIRM_TIMEOUT_MS = 4000L
-        private const val EXPEDITION_START_DELAY_MS = 1100L
-        private const val EXPEDITION_REDISPATCH_DELAY_MS = 1000L
-        private const val EXPEDITION_EXIT_DELAY_MS = 500L
-        private const val EXPEDITION_PHASE_TIMEOUT_MS = 3000L
-        private const val EXPEDITION_TOTAL_TIMEOUT_MS = 9000L
+        private const val FOREGROUND_CHECK_INTERVAL_MS = 500L
+        private const val SKIP_LOG_INTERVAL_MS = 5000L
+        private const val DIALOGUE_EXIT_CONFIRM_COUNT = 2
+        private const val DIALOGUE_TEXT_MIN_LEN = 6
+        private const val DIALOGUE_TEXT_MAX_LINES = 4
+        private const val CHAT_ICON_CHECK_INTERVAL_MS = 500L
 
         fun selectTopChatIcon(hits: List<Region>): Region? = hits.minByOrNull { it.y }
     }

@@ -57,6 +57,18 @@ class TriggerSettingsRepository(context: Context) {
         update { it.copy(showTapIndicator = enabled) }
     }
 
+    fun setExclamationClickEnabled(enabled: Boolean) {
+        update { it.copy(exclamationClickEnabled = enabled) }
+    }
+
+    fun setOrangeOptionEnabled(enabled: Boolean) {
+        update { it.copy(orangeOptionEnabled = enabled) }
+    }
+
+    fun setGenshinForegroundOnly(enabled: Boolean) {
+        update { it.copy(genshinForegroundOnly = enabled) }
+    }
+
     private fun update(transform: (TriggerSettings) -> TriggerSettings) {
         val newValue: TriggerSettings
         synchronized(lock) {
@@ -74,6 +86,9 @@ class TriggerSettingsRepository(context: Context) {
                 .putBoolean(KEY_SMART_OPTION, updated.smartOptionEnabled)
                 .putBoolean(KEY_BLACK_SCREEN, updated.blackScreenClickEnabled)
                 .putBoolean(KEY_TAP_INDICATOR, updated.showTapIndicator)
+                .putBoolean(KEY_EXCLAMATION, updated.exclamationClickEnabled)
+                .putBoolean(KEY_ORANGE, updated.orangeOptionEnabled)
+                .putBoolean(KEY_FOREGROUND_ONLY, updated.genshinForegroundOnly)
                 .apply()
         }
         listeners.forEach { listener ->
@@ -90,6 +105,9 @@ class TriggerSettingsRepository(context: Context) {
         smartOptionEnabled = prefs.getBoolean(KEY_SMART_OPTION, true),
         blackScreenClickEnabled = prefs.getBoolean(KEY_BLACK_SCREEN, true),
         showTapIndicator = prefs.getBoolean(KEY_TAP_INDICATOR, false),
+        exclamationClickEnabled = prefs.getBoolean(KEY_EXCLAMATION, true),
+        orangeOptionEnabled = prefs.getBoolean(KEY_ORANGE, true),
+        genshinForegroundOnly = prefs.getBoolean(KEY_FOREGROUND_ONLY, true),
     )
 
     private companion object {
@@ -102,5 +120,8 @@ class TriggerSettingsRepository(context: Context) {
         const val KEY_SMART_OPTION = "smartOptionEnabled"
         const val KEY_BLACK_SCREEN = "blackScreenClickEnabled"
         const val KEY_TAP_INDICATOR = "showTapIndicator"
+        const val KEY_EXCLAMATION = "exclamationClickEnabled"
+        const val KEY_ORANGE = "orangeOptionEnabled"
+        const val KEY_FOREGROUND_ONLY = "genshinForegroundOnly"
     }
 }
