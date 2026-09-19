@@ -309,9 +309,6 @@
                     app:trackTint="@color/overlay_switch_track"
                     app:trackTintMode="src_in" />
             </LinearLayout>
-            </LinearLayout>
-        </LinearLayout>
-
             <LinearLayout
                 android:id="@+id/overlay_row_smart_option"
                 android:layout_width="match_parent"
@@ -403,6 +400,9 @@
                     app:trackTint="@color/overlay_switch_track"
                     app:trackTintMode="src_in" />
             </LinearLayout>
+
+            </LinearLayout>
+        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/overlay_row_auto_pick"
