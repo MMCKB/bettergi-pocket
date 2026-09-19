@@ -8,15 +8,19 @@ import com.bettergi.pocket.recognition.IntRect
 import com.bettergi.pocket.recognition.RecognitionAssets
 import com.bettergi.pocket.recognition.RecognitionObject
 import com.bettergi.pocket.recognition.area.Region
+import com.bettergi.pocket.recognition.opencv.MatOps
 import com.bettergi.pocket.settings.TriggerSettings
 import com.bettergi.pocket.trigger.FeatureTick
 import com.bettergi.pocket.trigger.TriggerFeature
 import com.bettergi.pocket.trigger.screenBottomCenter
 import kotlin.math.abs
+import org.opencv.core.Core
+import org.opencv.core.Mat
+import org.opencv.core.Scalar
 
 /**
- * 自动对话（移植 PC 版 AutoSkip 核心，去掉语音/黑屏/弹窗）：
- * 感叹号优先、选项 OCR + 关键词决策、状态机 + 点击确认。
+ * 自动对话（移植 PC 版 AutoSkip 核心，去掉语音/弹窗/邀约）：
+ * 感叹号优先、选项 OCR + 关键词决策、状态机 + 点击确认、黑屏转场点击。
  */
 class AutoSkipFeature(
     private val assets: RecognitionAssets,
@@ -46,6 +50,9 @@ class AutoSkipFeature(
     @Volatile
     private var lastOptionDecisionAtMs: Long = 0L
 
+    @Volatile
+    private var lastBlackClickMs: Long = 0L
+
     override fun isEnabled(settings: TriggerSettings): Boolean =
         settings.screenShareEnabled && settings.autoSkipEnabled
 
@@ -54,9 +61,12 @@ class AutoSkipFeature(
 
         when (state) {
             State.IDLE -> {
-                if (!inDialogue(content)) return
-                events?.onTalkHistoryMatched()
-                state = State.IN_DIALOG
+                if (inDialogue(content)) {
+                    events?.onTalkHistoryMatched()
+                    state = State.IN_DIALOG
+                    return
+                }
+                clickBlackScreenIfNeeded(content, actions)
             }
 
             State.IN_DIALOG -> {
@@ -132,6 +142,33 @@ class AutoSkipFeature(
         }
     }
 
+    /** 黑屏转场检测：非对话时画面中部 1/3 区域接近全黑则点击推进（移植 PC 版）。 */
+    private fun clickBlackScreenIfNeeded(content: CaptureContent, actions: ActionEmitter) {
+        val now = System.currentTimeMillis()
+        if (now - lastBlackClickMs < BLACK_CLICK_INTERVAL_MS) return
+        val region = content.captureRectArea
+        val grey = region.cacheGreyMatSafe ?: return
+        val w = grey.cols()
+        val h = grey.rows()
+        if (w <= 0 || h < 30) return
+        val top = h / 3
+        val roi = MatOps.roiView(grey, IntRect(0, top, w, h - top * 2))
+        val mask = Mat()
+        try {
+            Core.inRange(roi, Scalar(0.0), Scalar(BLACK_GRAY_MAX), mask)
+            val black = Core.countNonZero(mask).toDouble()
+            val rate = black / (roi.cols() * roi.rows())
+            if (rate >= BLACK_RATE_MIN && rate < BLACK_RATE_MAX) {
+                Log.i(TAG, "black transition detected, rate=$rate, click center")
+                actions.emit(ClickAction(w / 2, h / 2))
+                lastBlackClickMs = now
+            }
+        } finally {
+            roi.release()
+            mask.release()
+        }
+    }
+
     /** 模板快速判定 + OCR 低频判定，任一命中即视为剧情对话中。 */
     private fun inDialogue(content: CaptureContent): Boolean {
         if (isDialogueScene(content, assets)) return true
@@ -185,6 +222,10 @@ class AutoSkipFeature(
         private const val CONFIRM_TIMEOUT_MS = 1200L
         private const val OCR_CHECK_INTERVAL_MS = 1500L
         private const val OPTION_DECISION_INTERVAL_MS = 1000L
+        private const val BLACK_CLICK_INTERVAL_MS = 1200L
+        private const val BLACK_GRAY_MAX = 30.0
+        private const val BLACK_RATE_MIN = 0.5
+        private const val BLACK_RATE_MAX = 0.98999
 
         fun selectTopChatIcon(hits: List<Region>): Region? = hits.minByOrNull { it.y }
     }
