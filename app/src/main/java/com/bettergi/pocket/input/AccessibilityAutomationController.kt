@@ -14,6 +14,7 @@ class AccessibilityAutomationController(
     override fun execute(action: AutomationAction) {
         when (action) {
             is ClickAction -> executeClick(action)
+            BackAction -> executeBack()
         }
     }
 

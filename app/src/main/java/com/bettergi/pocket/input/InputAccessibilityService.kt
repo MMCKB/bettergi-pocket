@@ -197,11 +197,24 @@ class InputAccessibilityService : AccessibilityService() {
             return remoteCall(METHOD_CLICK, extras)?.getBoolean(KEY_OK, false) == true
         }
 
+        fun back(): Boolean {
+            if (instance != null) return backLocal()
+            return remoteCall(METHOD_BACK)?.getBoolean(KEY_OK, false) == true
+        }
+
+        private fun backLocal(): Boolean {
+            val service = instance ?: return false
+            return service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+        }
+
         fun handleBridgeCall(method: String, extras: Bundle?): Bundle {
             return when (method) {
                 METHOD_STATUS -> Bundle().apply {
                     putBoolean(KEY_CONNECTED, instance != null)
                     putString(KEY_LAST_PACKAGE, lastAppPackage)
+                }
+                METHOD_BACK -> Bundle().apply {
+                    putBoolean(KEY_OK, backLocal())
                 }
                 METHOD_CLICK -> Bundle().apply {
                     putBoolean(

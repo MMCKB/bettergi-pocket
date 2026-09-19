@@ -16,3 +16,4 @@ local.properties
 /.idea
 /app/libs/*.jar
 tmp-opencv-desktop.jar
+dist/

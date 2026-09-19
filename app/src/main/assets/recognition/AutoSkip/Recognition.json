@@ -65,6 +65,27 @@
         ],
         "bbox": "rect(350, 1150, 2350, 450)"
       }
+    },
+    "Collect": {
+      "type": "TemplateMatch",
+      "template": "collect.png",
+      "threshold": 0.8
+    },
+    "Re": {
+      "type": "TemplateMatch",
+      "template": "re.png",
+      "threshold": 0.8
+    },
+    "Primogem": {
+      "type": "TemplateMatch",
+      "template": "primogem.png",
+      "threshold": 0.8
+    },
+    "BtnBlackConfirm": {
+      "type": "TemplateMatch",
+      "template": "btn_black_confirm.png",
+      "threshold": 0.8,
+      "use3Channels": true
     }
   }
 }

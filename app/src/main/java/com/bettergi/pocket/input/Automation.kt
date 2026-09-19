@@ -8,6 +8,8 @@ data class ClickAction(
     val durationMs: Long = 50L,
 ) : AutomationAction
 
+data object BackAction : AutomationAction
+
 interface AutomationController {
     fun execute(action: AutomationAction)
 }
