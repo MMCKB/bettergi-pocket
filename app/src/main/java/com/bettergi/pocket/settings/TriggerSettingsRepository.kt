@@ -53,6 +53,10 @@ class TriggerSettingsRepository(context: Context) {
         update { it.copy(blackScreenClickEnabled = enabled) }
     }
 
+    fun setShowTapIndicator(enabled: Boolean) {
+        update { it.copy(showTapIndicator = enabled) }
+    }
+
     private fun update(transform: (TriggerSettings) -> TriggerSettings) {
         val newValue: TriggerSettings
         synchronized(lock) {
@@ -69,6 +73,7 @@ class TriggerSettingsRepository(context: Context) {
                 .putBoolean(KEY_AUTO_LAUNCH_GENSHIN, updated.autoLaunchGenshinEnabled)
                 .putBoolean(KEY_SMART_OPTION, updated.smartOptionEnabled)
                 .putBoolean(KEY_BLACK_SCREEN, updated.blackScreenClickEnabled)
+                .putBoolean(KEY_TAP_INDICATOR, updated.showTapIndicator)
                 .apply()
         }
         listeners.forEach { listener ->
@@ -84,6 +89,7 @@ class TriggerSettingsRepository(context: Context) {
         autoLaunchGenshinEnabled = prefs.getBoolean(KEY_AUTO_LAUNCH_GENSHIN, false),
         smartOptionEnabled = prefs.getBoolean(KEY_SMART_OPTION, true),
         blackScreenClickEnabled = prefs.getBoolean(KEY_BLACK_SCREEN, true),
+        showTapIndicator = prefs.getBoolean(KEY_TAP_INDICATOR, false),
     )
 
     private companion object {
@@ -95,5 +101,6 @@ class TriggerSettingsRepository(context: Context) {
         const val KEY_AUTO_LAUNCH_GENSHIN = "autoLaunchGenshinEnabled"
         const val KEY_SMART_OPTION = "smartOptionEnabled"
         const val KEY_BLACK_SCREEN = "blackScreenClickEnabled"
+        const val KEY_TAP_INDICATOR = "showTapIndicator"
     }
 }

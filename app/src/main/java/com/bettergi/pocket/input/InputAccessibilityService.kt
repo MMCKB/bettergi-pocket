@@ -36,10 +36,27 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
-        val pkg = event.packageName?.toString() ?: return
-        if (pkg == packageName || pkg in TRANSIENT_PACKAGES) return
-        lastAppPackage = pkg
+        if (event == null) return
+        when (event.eventType) {
+            AccessibilityEvent.TYPE_TOUCH_INTERACTION_START -> {
+                broadcastTouchState(true)
+            }
+            AccessibilityEvent.TYPE_TOUCH_INTERACTION_END -> {
+                broadcastTouchState(false)
+            }
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                val pkg = event.packageName?.toString() ?: return
+                if (pkg == packageName || pkg in TRANSIENT_PACKAGES) return
+                lastAppPackage = pkg
+            }
+        }
+    }
+
+    private fun broadcastTouchState(touching: Boolean) {
+        sendBroadcast(Intent(ACTION_TOUCH_STATE).apply {
+            setPackage(packageName)
+            putExtra(EXTRA_TOUCHING, touching)
+        })
     }
 
     override fun onInterrupt() = Unit

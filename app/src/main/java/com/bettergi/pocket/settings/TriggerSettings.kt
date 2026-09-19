@@ -8,4 +8,5 @@ data class TriggerSettings(
     val autoLaunchGenshinEnabled: Boolean = false,
     val smartOptionEnabled: Boolean = true,
     val blackScreenClickEnabled: Boolean = true,
+    val showTapIndicator: Boolean = false,
 )

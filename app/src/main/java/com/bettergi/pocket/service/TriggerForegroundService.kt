@@ -91,7 +91,7 @@ class TriggerForegroundService : Service() {
                 AutoPickFeature(),
                 AutoSkipFeature(recognitionAssets, overlayController, OptionKeywords.load(applicationContext.assets)),
             ),
-            actionController = AccessibilityAutomationController(overlayController),
+            actionController = AccessibilityAutomationController(applicationContext, overlayController),
         )
         settingsRepository.addListener(settingsListener)
         genshinLaunchMonitor.start()

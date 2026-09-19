@@ -101,6 +101,11 @@ class OverlayWindowController(
     private var switchQuickSkip: SwitchCompat? = null
     private var switchSmartOption: SwitchCompat? = null
     private var switchBlackScreen: SwitchCompat? = null
+    private var switchTapIndicator: SwitchCompat? = null
+    private var rowTapIndicator: View? = null
+    private val hideTapIndicator = Runnable { tapIndicatorView?.visibility = View.GONE }
+    private var tapIndicatorView: View? = null
+    private var tapIndicatorParams: WindowManager.LayoutParams? = null
     private var switchAutoPick: SwitchCompat? = null
     private var switchAutoLaunch: SwitchCompat? = null
     private var launchHint: TextView? = null
@@ -153,6 +158,7 @@ class OverlayWindowController(
             switchQuickSkip?.isChecked = settings.quickSkipDialogueEnabled
             switchSmartOption?.isChecked = settings.smartOptionEnabled
             switchBlackScreen?.isChecked = settings.blackScreenClickEnabled
+            switchTapIndicator?.isChecked = settings.showTapIndicator
             switchAutoPick?.isChecked = settings.autoPickEnabled
             switchAutoLaunch?.isChecked = settings.autoLaunchGenshinEnabled
             applyFeatureEnabled(settings)
@@ -177,6 +183,7 @@ class OverlayWindowController(
         val quickSkipSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_quick_skip)
         val smartOptionSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_smart_option)
         val blackScreenSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_black_screen)
+        val tapIndicatorSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_tap_indicator)
         val autoPickSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_auto_pick)
         val autoLaunchSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_auto_launch)
         val logToggle = root.findViewById<ImageButton>(R.id.overlay_log_toggle)
@@ -197,6 +204,7 @@ class OverlayWindowController(
         switchQuickSkip = quickSkipSwitch
         switchSmartOption = smartOptionSwitch
         switchBlackScreen = blackScreenSwitch
+        switchTapIndicator = tapIndicatorSwitch
         switchAutoPick = autoPickSwitch
         switchAutoLaunch = autoLaunchSwitch
         launchHint = root.findViewById(R.id.overlay_auto_launch_hint)
@@ -206,6 +214,7 @@ class OverlayWindowController(
         rowQuickSkip = root.findViewById(R.id.overlay_row_quick_skip)
         rowSmartOption = root.findViewById(R.id.overlay_row_smart_option)
         rowBlackScreen = root.findViewById(R.id.overlay_row_black_screen)
+        rowTapIndicator = root.findViewById(R.id.overlay_row_tap_indicator)
         rowLaunch = root.findViewById(R.id.overlay_row_launch)
         rowAutoPick = root.findViewById<View>(R.id.overlay_row_auto_pick).also { row ->
             row.visibility = if (AutoPickFeature.AVAILABLE) View.VISIBLE else View.GONE
@@ -271,6 +280,10 @@ class OverlayWindowController(
         blackScreenSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (updatingUi) return@setOnCheckedChangeListener
             settingsRepository.setBlackScreenClickEnabled(isChecked)
+        }
+        tapIndicatorSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (updatingUi) return@setOnCheckedChangeListener
+            settingsRepository.setShowTapIndicator(isChecked)
         }
         autoPickSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (updatingUi) return@setOnCheckedChangeListener
@@ -392,6 +405,9 @@ class OverlayWindowController(
         switchQuickSkip = null
         switchSmartOption = null
         switchBlackScreen = null
+        switchTapIndicator = null
+        rowTapIndicator = null
+        releaseTapIndicator()
         switchAutoPick = null
         switchAutoLaunch = null
         launchHint = null
@@ -567,11 +583,13 @@ class OverlayWindowController(
         switchQuickSkip?.isEnabled = autoSkipOn
         switchSmartOption?.isEnabled = autoSkipOn
         switchBlackScreen?.isEnabled = autoSkipOn
+        switchTapIndicator?.isEnabled = shareOn
         rowAutoSkip?.alpha = if (shareOn) 1f else 0.45f
         rowAutoPick?.alpha = if (shareOn) 1f else 0.45f
         rowQuickSkip?.alpha = if (autoSkipOn) 1f else 0.45f
         rowSmartOption?.alpha = if (autoSkipOn) 1f else 0.45f
         rowBlackScreen?.alpha = if (autoSkipOn) 1f else 0.45f
+        rowTapIndicator?.alpha = if (shareOn) 1f else 0.45f
     }
 
     override fun onTalkHistoryMatched() {
@@ -630,6 +648,58 @@ class OverlayWindowController(
                 scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
             }
         }
+    }
+
+    /** 在点击位置闪现一个圆点（设置开启时），用于可视化自动点击位置。 */
+    fun flashTap(x: Int, y: Int) {
+        if (!settingsRepository.get().showTapIndicator) return
+        if (!Settings.canDrawOverlays(context)) return
+        mainHandler.post {
+            val size = dp(TAP_INDICATOR_SIZE_DP)
+            if (tapIndicatorView == null) {
+                val dot = View(themedContext)
+                dot.background = ContextCompat.getDrawable(themedContext, R.drawable.tap_indicator)
+                val params = WindowManager.LayoutParams(
+                    size,
+                    size,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    PixelFormat.TRANSLUCENT,
+                ).apply {
+                    gravity = Gravity.TOP or Gravity.START
+                }
+                try {
+                    windowManager.addView(dot, params)
+                } catch (_: Throwable) {
+                    return@post
+                }
+                tapIndicatorView = dot
+                tapIndicatorParams = params
+            }
+            val params = tapIndicatorParams ?: return@post
+            params.x = x - size / 2
+            params.y = y - size / 2
+            tapIndicatorView?.visibility = View.VISIBLE
+            try {
+                windowManager.updateViewLayout(tapIndicatorView, params)
+            } catch (_: Throwable) {
+            }
+            mainHandler.removeCallbacks(hideTapIndicator)
+            mainHandler.postDelayed(hideTapIndicator, TAP_INDICATOR_MS)
+        }
+    }
+
+    private fun releaseTapIndicator() {
+        mainHandler.removeCallbacks(hideTapIndicator)
+        val view = tapIndicatorView ?: return
+        try {
+            windowManager.removeView(view)
+        } catch (_: Throwable) {
+        }
+        tapIndicatorView = null
+        tapIndicatorParams = null
     }
 
     private fun setLogWindowVisible(visible: Boolean, persist: Boolean = true) {
@@ -1161,5 +1231,7 @@ class OverlayWindowController(
         private const val IDLE_DELAY_MS = 2400L
         private const val TALKING_HOLD_MS = 2000L
         private const val MAX_LOG_LINES = 16
+        private const val TAP_INDICATOR_SIZE_DP = 28
+        private const val TAP_INDICATOR_MS = 450L
     }
 }
