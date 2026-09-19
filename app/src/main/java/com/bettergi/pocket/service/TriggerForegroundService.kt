@@ -16,6 +16,7 @@ import com.bettergi.pocket.capture.CapturePermissionActivity
 import com.bettergi.pocket.capture.ScreenCaptureController
 import com.bettergi.pocket.feature.autopick.AutoPickFeature
 import com.bettergi.pocket.feature.autoskip.AutoSkipFeature
+import com.bettergi.pocket.feature.autoskip.OptionKeywords
 import com.bettergi.pocket.genshin.GenshinLaunchMonitor
 import com.bettergi.pocket.genshin.GenshinLauncher
 import com.bettergi.pocket.input.AccessibilityAutomationController
@@ -88,7 +89,7 @@ class TriggerForegroundService : Service() {
             captureController = captureController,
             features = listOf(
                 AutoPickFeature(),
-                AutoSkipFeature(recognitionAssets, overlayController),
+                AutoSkipFeature(recognitionAssets, overlayController, OptionKeywords.load(applicationContext.assets)),
             ),
             actionController = AccessibilityAutomationController(overlayController),
         )

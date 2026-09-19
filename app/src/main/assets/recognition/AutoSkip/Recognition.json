@@ -13,7 +13,12 @@
         "bbox": "rect(375, 72, 55, 47)"
       },
       "search": {
-        "expandPercent": [0, 0.02, 0.12, 0.02]
+        "expandPercent": [
+          0,
+          0.02,
+          0.12,
+          0.02
+        ]
       }
     },
     "ChatIcon": {
@@ -28,7 +33,37 @@
       },
       "search": {
         "box": "rect(1787, 126, 1098, 1470)",
-        "expandPercent": [0.10, 0, 0, 0]
+        "expandPercent": [
+          0.1,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "ExclamationIcon": {
+      "type": "TemplateMatch",
+      "template": "icon_exclamation.png",
+      "threshold": 0.8,
+      "reference": {
+        "size": [
+          1920,
+          1080
+        ],
+        "bbox": "rect(0, 0, 26, 28)"
+      },
+      "search": {
+        "box": "rect(900, 90, 1000, 950)"
+      }
+    },
+    "DialogueText": {
+      "type": "Ocr",
+      "reference": {
+        "size": [
+          3040,
+          1904
+        ],
+        "bbox": "rect(350, 1150, 2350, 450)"
       }
     }
   }

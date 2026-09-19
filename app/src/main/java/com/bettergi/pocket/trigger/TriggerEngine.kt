@@ -22,6 +22,12 @@ class TriggerEngine(
     @Volatile
     private var running = false
 
+    @Volatile
+    private var lastActionAtMs: Long = 0L
+
+    @Volatile
+    private var lastActionAtMs: Long = 0L
+
     fun start() {
         if (running) return
         running = true
@@ -58,12 +64,14 @@ class TriggerEngine(
 
             if (enabled.isEmpty()) {
                 captureController.discardLatestImages()
-                handler.postDelayed(this, TICK_INTERVAL_MS)
+                handler.postDelayed(this, SLOW_TICK_MS)
                 return
             }
 
             try {
-                val emitter = BufferedActionEmitter()
+                val emitter = BufferedActionEmitter {
+                    lastActionAtMs = System.currentTimeMillis()
+                }
                 if (needFrame) {
                     val captured = captureController.acquireLatestBgr()
                     if (captured != null) {
@@ -92,15 +100,20 @@ class TriggerEngine(
                 Log.e(TAG, "recognize frame failed", e)
             }
 
-            handler.postDelayed(this, TICK_INTERVAL_MS)
+            val now = System.currentTimeMillis()
+            val interval = if (now - lastActionAtMs < ACTIVE_WINDOW_MS) FAST_TICK_MS else SLOW_TICK_MS
+            handler.postDelayed(this, interval)
         }
     }
 
-    private class BufferedActionEmitter : ActionEmitter {
+    private class BufferedActionEmitter(
+        private val onAction: () -> Unit = {},
+    ) : ActionEmitter {
         private val pending = ArrayList<AutomationAction>(4)
 
         override fun emit(action: AutomationAction) {
             pending.add(action)
+            onAction()
         }
 
         fun flushTo(controller: AutomationController) {
@@ -111,7 +124,9 @@ class TriggerEngine(
 
     private companion object {
         const val TAG = "BetterGI.Engine"
-        const val TICK_INTERVAL_MS = 100L
+        const val FAST_TICK_MS = 100L
+        const val SLOW_TICK_MS = 500L
+        const val ACTIVE_WINDOW_MS = 1500L
         const val WAIT_CAPTURE_MS = 300L
     }
 }
