@@ -13,7 +13,6 @@ import com.bettergi.pocket.settings.TriggerSettings
 import com.bettergi.pocket.trigger.FeatureTick
 import com.bettergi.pocket.trigger.TriggerFeature
 import com.bettergi.pocket.trigger.screenBottomCenter
-import kotlin.math.abs
 import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.Scalar
@@ -61,7 +60,7 @@ class AutoSkipFeature(
 
         when (state) {
             State.IDLE -> {
-                if (inDialogue(content)) {
+                if (inDialogue(content, settings)) {
                     events?.onTalkHistoryMatched()
                     state = State.IN_DIALOG
                     return
@@ -70,7 +69,7 @@ class AutoSkipFeature(
             }
 
             State.IN_DIALOG -> {
-                if (!inDialogue(content)) {
+                if (!inDialogue(content, settings)) {
                     state = State.IDLE
                     return
                 }
@@ -88,7 +87,7 @@ class AutoSkipFeature(
                 val excls = content.findMulti(
                     assets.get(TASK_NAME, "ExclamationIcon", content.captureRectArea),
                 )
-                if (excls.isNotEmpty()) {
+                if (settings.smartOptionEnabled && excls.isNotEmpty()) {
                     val (x, y) = excls[0].centerOnNativeCapture()
                     Log.i(TAG, "click exclamation option at $x,$y")
                     actions.emit(ClickAction(x, y))
@@ -122,7 +121,7 @@ class AutoSkipFeature(
             }
 
             State.CONFIRMING -> {
-                if (!inDialogue(content)) {
+                if (!inDialogue(content, settings)) {
                     state = State.IDLE
                     return
                 }
@@ -159,7 +158,7 @@ class AutoSkipFeature(
         val roi = MatOps.roiView(grey, IntRect(0, top, w, h - top * 2))
         val mask = Mat()
         try {
-            Core.inRange(roi, Scalar(0.0), Scalar(BLACK_GRAY_MAX), mask)
+            Core.inRange(roi, Scalar(0.0), Scalar(0.0), mask)
             val black = Core.countNonZero(mask).toDouble()
             val rate = black / (roi.cols() * roi.rows())
             if (rate >= BLACK_RATE_MIN && rate < BLACK_RATE_MAX) {
@@ -174,8 +173,9 @@ class AutoSkipFeature(
     }
 
     /** 模板快速判定 + OCR 低频判定，任一命中即视为剧情对话中。 */
-    private fun inDialogue(content: CaptureContent): Boolean {
+    private fun inDialogue(content: CaptureContent, settings: TriggerSettings): Boolean {
         if (isDialogueScene(content, assets)) return true
+        if (!settings.smartOptionEnabled) return false
         val now = System.currentTimeMillis()
         if (now - lastOcrCheckMs < OCR_CHECK_INTERVAL_MS) return lastOcrDialogueHit
         lastOcrCheckMs = now
@@ -184,39 +184,49 @@ class AutoSkipFeature(
         return lastOcrDialogueHit
     }
 
-    /** 关键词决策：select 优先，pause 过滤，兜底第一个可点选项。 */
+    /**
+     * 关键词决策（对齐 PC 版 ChatOptionChoose）：
+     * 焦点选项在最低（Y 最大）；OCR 固定宽度区域读文字；
+     * 先查 pause（命中即停不点），再查 select（命中点文字行），兜底点最低。
+     */
     private fun decideOption(content: CaptureContent, hits: List<Region>): Region? {
         if (hits.isEmpty()) return null
         val region = content.captureRectArea
-        val textLines = ocrOptionTexts(region, hits)
-        val paired = hits.map { hit ->
-            val line = textLines.minByOrNull { abs(it.y - hit.y) }
-            val text = if (line != null && abs(line.y - hit.y) <= hit.height * 2) line.text else null
-            hit to text
-        }
-        for ((hit, text) in paired) {
-            if (text != null && optionKeywords.select.any { text.contains(it) }) return hit
-        }
-        val clickable = paired.filter { (_, text) ->
-            text == null || optionKeywords.pause.none { text.contains(it) }
-        }
-        return clickable.firstOrNull()?.first ?: hits.firstOrNull()
-    }
+        val lowest = hits.maxByOrNull { it.y } ?: return null
 
-    /** 对选项气泡右侧文字区域做一次 OCR，返回文本行（识别区域坐标）。 */
-    private fun ocrOptionTexts(
-        region: com.bettergi.pocket.recognition.area.ImageRegion,
-        hits: List<Region>,
-    ): List<Region> {
-        val minY = hits.minOf { it.y }
-        val maxY = hits.maxOf { it.y + it.height }
-        val left = (hits.minOf { it.x + it.width } + 8).coerceAtMost(region.width - 1)
-        val width = region.width - left
-        val height = (maxY - minY + 20).coerceAtMost(region.height - minY)
-        if (width <= 0 || height <= 0) return emptyList()
+        val scale = region.width / 1920.0
+        val ocrLeft = (lowest.x + lowest.width + 8 * scale).toInt().coerceAtMost(region.width - 1)
+        val ocrWidth = (535 * scale).toInt().coerceAtLeast(80)
+        val ocrTop = (region.height / 12).coerceAtLeast(0)
+        val ocrBottom = (lowest.y + lowest.height + 30 * scale).toInt().coerceAtMost(region.height)
+        val ocrHeight = ocrBottom - ocrTop
+        if (ocrLeft < 0 || ocrWidth <= 0 || ocrHeight <= 0) return lowest
+
         val ro = RecognitionObject.ocrThis()
-        ro.regionOfInterest = IntRect(left, minY, width, height)
-        return region.findMulti(ro)
+        ro.regionOfInterest = IntRect(ocrLeft, ocrTop, ocrWidth, ocrHeight)
+        val lines = region.findMulti(ro)
+
+        val rs = lines
+            .filter { line ->
+                val t = line.text ?: return@filter false
+                if (t.isBlank()) return@filter false
+                if (t.length < 5 && t.all { it in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ." }) {
+                    return@filter false
+                }
+                true
+            }
+            .sortedBy { it.y }
+        if (rs.isEmpty()) return lowest
+
+        for (item in rs) {
+            val t = item.text ?: continue
+            if (optionKeywords.pause.any { t.contains(it) }) return null
+        }
+        for (item in rs) {
+            val t = item.text ?: continue
+            if (optionKeywords.select.any { t.contains(it) }) return item
+        }
+        return rs.last()
     }
 
     companion object {
@@ -227,7 +237,6 @@ class AutoSkipFeature(
         private const val OCR_CHECK_INTERVAL_MS = 1500L
         private const val OPTION_DECISION_INTERVAL_MS = 1000L
         private const val BLACK_CLICK_INTERVAL_MS = 1200L
-        private const val BLACK_GRAY_MAX = 30.0
         private const val BLACK_RATE_MIN = 0.5
         private const val BLACK_RATE_MAX = 0.98999
 
