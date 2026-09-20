@@ -1,83 +1,100 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="260dp"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_overlay_log_body"
-    android:orientation="vertical">
+    android:background="@drawable/bg_overlay_log_body">
 
-    <HorizontalScrollView
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:overScrollMode="never"
-        android:scrollbars="none">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingHorizontal="8dp"
-            android:paddingTop="6dp">
-
-            <TextView
-                android:id="@+id/overlay_log_filter_all"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="10dp"
-                android:paddingHorizontal="4dp"
-                android:text="全部"
-                android:textColor="@color/overlay_log_green"
-                android:textSize="10sp" />
-
-            <TextView
-                android:id="@+id/overlay_log_filter_autoskip"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="10dp"
-                android:paddingHorizontal="4dp"
-                android:text="对话"
-                android:textColor="@color/overlay_text_muted"
-                android:textSize="10sp" />
-
-            <TextView
-                android:id="@+id/overlay_log_filter_root"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="10dp"
-                android:paddingHorizontal="4dp"
-                android:text="root"
-                android:textColor="@color/overlay_text_muted"
-                android:textSize="10sp" />
-
-            <TextView
-                android:id="@+id/overlay_log_filter_other"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingHorizontal="4dp"
-                android:text="其他"
-                android:textColor="@color/overlay_text_muted"
-                android:textSize="10sp" />
-        </LinearLayout>
-    </HorizontalScrollView>
-
-    <ScrollView
-        android:id="@+id/overlay_log_scroll"
-        android:layout_width="match_parent"
-        android:layout_height="112dp"
-        android:fadeScrollbars="false"
-        android:fillViewport="true"
-        android:overScrollMode="never"
-        android:scrollbars="vertical">
-
-        <TextView
-            android:id="@+id/overlay_log_text"
+        <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:lineSpacingExtra="2dp"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="6dp"
-            android:text="等待识别…"
-            android:textColor="@color/overlay_log_green"
-            android:textSize="10sp" />
-    </ScrollView>
-</LinearLayout>
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="6dp">
+
+                <TextView
+                    android:id="@+id/overlay_log_filter_all"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="全部"
+                    android:textColor="@color/overlay_log_green"
+                    android:textSize="10sp" />
+
+                <TextView
+                    android:id="@+id/overlay_log_filter_autoskip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="对话"
+                    android:textColor="@color/overlay_text_muted"
+                    android:textSize="10sp" />
+
+                <TextView
+                    android:id="@+id/overlay_log_filter_root"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="root"
+                    android:textColor="@color/overlay_text_muted"
+                    android:textSize="10sp" />
+
+                <TextView
+                    android:id="@+id/overlay_log_filter_other"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="4dp"
+                    android:text="其他"
+                    android:textColor="@color/overlay_text_muted"
+                    android:textSize="10sp" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <ScrollView
+            android:id="@+id/overlay_log_scroll"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <TextView
+                android:id="@+id/overlay_log_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:lineSpacingExtra="2dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="18dp"
+                android:text="等待识别…"
+                android:textColor="@color/overlay_log_green"
+                android:textSize="10sp" />
+        </ScrollView>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/overlay_log_resize"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:padding="2dp"
+        android:text="╲"
+        android:textColor="@color/overlay_text_muted"
+        android:textSize="11sp" />
+</FrameLayout>

@@ -132,6 +132,7 @@ class OverlayWindowController(
     private var logFilterAutoSkip: TextView? = null
     private var logFilterRoot: TextView? = null
     private var logFilterOther: TextView? = null
+    private var logResizeView: View? = null
     private var logHandleParams: WindowManager.LayoutParams? = null
     private var logBodyParams: WindowManager.LayoutParams? = null
     private val logLines = ArrayDeque<String>(MAX_LOG_LINES)
@@ -639,7 +640,7 @@ class OverlayWindowController(
             val child = scroll.getChildAt(0) ?: return@post
             val atBottom = scroll.scrollY >= child.height - scroll.height - 4
             if (atBottom) {
-                scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+                scroll.post { scroll.smoothScrollTo(0, scroll.getChildAt(0)?.height ?: 0) }
             }
         }
     }
@@ -849,14 +850,19 @@ class OverlayWindowController(
         logFilterAutoSkip = body.findViewById(R.id.overlay_log_filter_autoskip)
         logFilterRoot = body.findViewById(R.id.overlay_log_filter_root)
         logFilterOther = body.findViewById(R.id.overlay_log_filter_other)
+        logResizeView = body.findViewById(R.id.overlay_log_resize)
+        logFilterAll?.setOnClickListener { setLogFilter(null) }
+        logFilterAutoSkip?.setOnClickListener { setLogFilter("autoskip") }
+        logFilterRoot?.setOnClickListener { setLogFilter("root") }
+        logFilterOther?.setOnClickListener { setLogFilter("other") }
+        logResizeView?.let { setupLogResize(it) }
         setLogFilter(null)
 
-        val width = dp(LOG_WIDTH_DP)
+        val width = dp(prefs.getInt(KEY_LOG_W, LOG_WIDTH_DP))
+        val height = dp(prefs.getInt(KEY_LOG_H, LOG_DEFAULT_HEIGHT_DP))
         val (defaultX, defaultY) = defaultLogPosition()
-        val minY = statusBarHeight()
         val x = prefs.getInt(KEY_LOG_X, defaultX)
-        val savedY = prefs.getInt(KEY_LOG_Y, defaultY)
-        val y = if (savedY < minY) defaultY else savedY
+        val y = prefs.getInt(KEY_LOG_Y, defaultY)
 
         val handleParams = overlayParams(
             width = width,
@@ -867,7 +873,7 @@ class OverlayWindowController(
         )
         val bodyParams = overlayParams(
             width = width,
-            height = WindowManager.LayoutParams.WRAP_CONTENT,
+            height = height,
             touchable = true,
             x = x,
             y = y + dp(28),
@@ -887,7 +893,7 @@ class OverlayWindowController(
             handle.post {
                 clampLogWindows()
                 renderLogs()
-                logScroll?.post { logScroll?.fullScroll(View.FOCUS_DOWN) }
+                logScroll?.post { logScroll?.smoothScrollTo(0, logScroll?.getChildAt(0)?.height ?: 0) }
                 val settings = settingsRepository.get()
                 appendLog("状态：root=${if (RootBridge.isRunning()) "已连接" else "未连接"} 共享=${if (settings.screenShareEnabled) "开" else "关"} 对话=${if (settings.autoSkipEnabled) "开" else "关"} 拾取=${if (settings.autoPickEnabled) "开" else "关"}")
             }
@@ -916,6 +922,7 @@ class OverlayWindowController(
         logFilterAutoSkip = null
         logFilterRoot = null
         logFilterOther = null
+        logResizeView = null
     }
 
     private fun overlayParams(
@@ -982,7 +989,7 @@ class OverlayWindowController(
         val width = if (handle.width > 0) handle.width else dp(LOG_WIDTH_DP)
         val handleHeight = if (handle.height > 0) handle.height else dp(28)
         val bodyHeight = logBodyView?.height?.takeIf { it > 0 } ?: dp(120)
-        val minY = statusBarHeight()
+        val minY = 0
         handleLp.x = handleLp.x.coerceIn(0, (screen.first - width).coerceAtLeast(0))
         handleLp.y = handleLp.y.coerceIn(
             minY,
@@ -1011,6 +1018,61 @@ class OverlayWindowController(
 
     private fun persistLogPosition(lp: WindowManager.LayoutParams) {
         prefs.edit().putInt(KEY_LOG_X, lp.x).putInt(KEY_LOG_Y, lp.y).apply()
+    }
+
+    /** 日志窗口右下角缩放手柄：拖动改变窗口宽高，限制在屏幕内。 */
+    private fun setupLogResize(handle: View) {
+        var startW = 0
+        var startH = 0
+        var touchX = 0f
+        var touchY = 0f
+        handle.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    startW = logBodyParams?.width ?: return@setOnTouchListener true
+                    startH = logBodyParams?.height ?: return@setOnTouchListener true
+                    touchX = event.rawX
+                    touchY = event.rawY
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val params = logBodyParams ?: return@setOnTouchListener true
+                    val screen = screenSize()
+                    val newW = (startW + (event.rawX - touchX).toInt())
+                        .coerceIn(dp(150), (screen.first * 0.92f).toInt())
+                    val newH = (startH + (event.rawY - touchY).toInt())
+                        .coerceIn(dp(100), (screen.second * 0.85f).toInt())
+                    params.width = newW
+                    params.height = newH
+                    logHandleParams?.width = newW
+                    val body = logBodyView
+                    val handleView = logHandleView
+                    val handleLp = logHandleParams
+                    try {
+                        body?.let { windowManager.updateViewLayout(it, params) }
+                        if (handleView != null && handleLp != null) {
+                            windowManager.updateViewLayout(handleView, handleLp)
+                        }
+                    } catch (_: Throwable) {
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    logBodyParams?.let { persistLogSize(it) }
+                    clampLogWindows()
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
+    private fun persistLogSize(lp: WindowManager.LayoutParams) {
+        val density = context.resources.displayMetrics.density
+        prefs.edit()
+            .putInt(KEY_LOG_W, (lp.width / density).toInt())
+            .putInt(KEY_LOG_H, (lp.height / density).toInt())
+            .apply()
     }
 
     private fun setupDrag(
@@ -1270,6 +1332,8 @@ class OverlayWindowController(
         private const val KEY_LOG_X = "log_x"
         private const val KEY_LOG_Y = "log_y"
         private const val KEY_LOG_VISIBLE = "log_visible"
+        private const val KEY_LOG_W = "log_w"
+        private const val KEY_LOG_H = "log_h"
         private const val KEY_AUTO_SKIP_EXPANDED = "auto_skip_expanded"
         private const val KEY_LAUNCH_EXPANDED = "launch_expanded"
         private const val KEY_SNAP_EDGE = "snap_edge"
