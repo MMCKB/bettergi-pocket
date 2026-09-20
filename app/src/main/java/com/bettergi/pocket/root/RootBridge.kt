@@ -115,8 +115,8 @@ object RootBridge {
             socket = s
             output = s.outputStream
             reader = BufferedReader(InputStreamReader(s.inputStream), 1024)
-            val pong = request("PING", PING_TIMEOUT_MS)
-            if (pong == "pong") {
+            val pong = request("PING", PING_TIMEOUT_MS)?.trim()
+            if (pong == "OK pong" || pong == "pong") {
                 running = true
                 AppLog.i(TAG, "root backend connected")
                 applyKeepAlive()
