@@ -386,10 +386,14 @@ static int run_server(const char *sock_path, int allow_uid) {
             struct ucred cred;
             socklen_t len = sizeof(cred);
             if (getsockopt(cfd, SOL_SOCKET, SO_PEERCRED, &cred, &len) == 0) {
+                fprintf(stderr, "peer uid=%d\n", (int)cred.uid);
                 if ((int)cred.uid != allow_uid) {
+                    fprintf(stderr, "reject uid %d (expect %d)\n", (int)cred.uid, allow_uid);
                     close(cfd);
                     continue;
                 }
+            } else {
+                fprintf(stderr, "peercred failed: %s (accepting anyway)\n", strerror(errno));
             }
         }
         char line[MAX_LINE];
@@ -403,6 +407,8 @@ static int run_server(const char *sock_path, int allow_uid) {
             char *nl;
             while ((nl = strchr(line, '\n')) != NULL) {
                 *nl = '\0';
+                fprintf(stderr, "cmd: %s\n", line);
+                fflush(stderr);
                 char resp[512];
                 if (handle_line(line, resp, sizeof(resp)) == 1) quit = 1;
                 if (write(cfd, resp, strlen(resp)) < 0) break;

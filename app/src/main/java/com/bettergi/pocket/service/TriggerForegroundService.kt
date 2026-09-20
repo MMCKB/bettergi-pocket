@@ -119,9 +119,11 @@ class TriggerForegroundService : Service() {
                         Toast.LENGTH_SHORT,
                     ).show()
                 }
+            } else {
+                // root 就绪后再做前台感知，避免与 start() 握手并发读写 socket
+                genshinLaunchMonitor.start()
             }
         }.start()
-        genshinLaunchMonitor.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

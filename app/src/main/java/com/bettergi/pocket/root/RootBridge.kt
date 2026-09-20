@@ -122,6 +122,7 @@ object RootBridge {
                 applyKeepAlive()
                 return true
             }
+            AppLog.w(TAG, "PING handshake failed: $pong")
             try {
                 s.close()
             } catch (_: Exception) {
@@ -194,10 +195,12 @@ object RootBridge {
 
     /** 发送一行指令并读取一行回复；失败返回 null 并标记断线 */
     @Synchronized
-    fun request(cmd: String, timeoutMs: Long = 3000L): String? {
+    fun request(cmd: String, timeoutMs: Long = 5000L): String? {
+        val sock = socket ?: return null
         val out = output ?: return null
         val rd = reader ?: return null
         return try {
+            sock.soTimeout = timeoutMs.toInt()
             out.write((cmd + "\n").toByteArray(Charsets.UTF_8))
             out.flush()
             val line = rd.readLine() ?: run {
