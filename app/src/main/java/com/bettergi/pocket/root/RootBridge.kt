@@ -3,7 +3,6 @@ package com.bettergi.pocket.root
 import android.content.Context
 import android.net.LocalSocket
 import android.net.LocalSocketAddress
-import android.os.Process
 import com.bettergi.pocket.log.AppLog
 import java.io.BufferedReader
 import java.io.File
@@ -88,7 +87,7 @@ object RootBridge {
         val sockPath = File(dir, "sock").absolutePath
         File(sockPath).delete()
 
-        val cmd = "su -c \"$helper --server --sock $sockPath --uid ${Process.myUid()}\""
+        val cmd = "su -c \"$helper --server --sock $sockPath --uid ${android.os.Process.myUid()}\""
         val process = try {
             ProcessBuilder("sh", "-c", cmd).redirectErrorStream(false).start()
         } catch (e: Exception) {
