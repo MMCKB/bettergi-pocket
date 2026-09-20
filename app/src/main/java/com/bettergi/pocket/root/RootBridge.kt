@@ -48,32 +48,6 @@ object RootBridge {
 
     fun isRunning(): Boolean = running
 
-    /** 探测 su 是否真正可用（多路径 + 多种调用变体，输出必须含 uid=0） */
-    fun isSuAvailable(): Boolean {
-        val ctx = appContext ?: return false
-        val suPaths = listOf(
-            "/system/bin/su",
-            "/system/xbin/su",
-            "/sbin/su",
-            "/vendor/bin/su",
-        )
-        var found = suPaths.any { runCommand(ctx, "test -x $it && echo yes", 1500L)?.trim() == "yes" }
-        if (!found) {
-            found = runCommand(ctx, "command -v su", 1500L)?.trim()?.isNotEmpty() == true
-        }
-        if (!found) return false
-        val variants = listOf(
-            "su -c id",
-            "su 0 id",
-            "su -c 'id'",
-        )
-        for (v in variants) {
-            val out = runCommand(ctx, v, 2500L) ?: continue
-            if (out.contains("uid=0")) return true
-        }
-        return false
-    }
-
     /** 启动 helper 并完成握手；成功返回 true */
     @Synchronized
     fun start(): Boolean {
@@ -251,21 +225,6 @@ object RootBridge {
             return w to h
         }
         return null
-    }
-
-    fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long) {
-        request("SWIPE $x1 $y1 $x2 $y2 $durationMs", 3000L)
-    }
-
-    fun longPress(x: Int, y: Int, durationMs: Long) {
-        request("LONG $x $y $durationMs", 3000L)
-    }
-
-    fun pidOf(packageName: String): Int? {
-        val resp = request("PID $packageName", 2000L) ?: return null
-        if (!resp.startsWith("OK ")) return null
-        val pid = resp.removePrefix("OK ").trim().toIntOrNull() ?: return null
-        return if (pid > 0) pid else null
     }
 
     /** 加入电池白名单 + 提升为 active 待机桶；每进程只应用一次 */
