@@ -104,7 +104,7 @@ class TriggerForegroundService : Service() {
                     OptionKeywords.load(applicationContext.assets),
                 ),
             ),
-            actionController = RootAutomationController(),
+            actionController = RootAutomationController(applicationContext),
         )
         settingsRepository.addListener(settingsListener)
         Thread {
