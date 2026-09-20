@@ -90,7 +90,10 @@ object RootBridge {
         File(sockPath).delete()
 
         val su = resolveSu()
-        val cmd = "$su -c \"$helper --server --sock $sockPath --uid ${android.os.Process.myUid()}\""
+        // 清理可能残留的旧 helper：避免文件被占用（ETXTBSY）与多实例争用 socket/uinput
+        runCommand(ctx, "$su -c \"pkill -f bgroot 2>/dev/null; sleep 0.2\"", 3000L)
+
+        val cmd = "$su -c \"$helper --server --sock $sockPath --uid ${android.os.Process.myUid()} --app-pid ${android.os.Process.myPid()}\""
         val process = try {
             ProcessBuilder("sh", "-c", cmd).redirectErrorStream(false).start()
         } catch (e: Exception) {
@@ -150,21 +153,29 @@ object RootBridge {
     }
 
     /** 每次启动都从 assets 覆盖释放，保证与当前安装包一致 */
+    /** 释放 helper：先写临时文件再 rename 替换（旧进程持有的 inode 换新，避免 ETXTBSY） */
     private fun releaseHelper(dest: File): Boolean {
         val ctx = appContext ?: return false
-        val source = try {
-            ctx.assets.open(HELPER_ASSET)
-        } catch (e: Exception) {
-            AppLog.e(TAG, "asset missing: $HELPER_ASSET", e)
-            return false
-        }
+        val tmp = File(dest.parentFile, dest.name + ".tmp")
         return try {
-            source.use { input ->
-                dest.outputStream().use { out -> input.copyTo(out) }
+            ctx.assets.open(HELPER_ASSET).use { input ->
+                tmp.outputStream().use { out -> input.copyTo(out) }
+            }
+            tmp.setExecutable(true, false)
+            if (!tmp.renameTo(dest)) {
+                dest.delete()
+                if (!tmp.renameTo(dest)) {
+                    AppLog.e(TAG, "rename helper failed")
+                    return false
+                }
             }
             true
         } catch (e: Exception) {
             AppLog.e(TAG, "release helper failed", e)
+            try {
+                tmp.delete()
+            } catch (_: Throwable) {
+            }
             false
         }
     }

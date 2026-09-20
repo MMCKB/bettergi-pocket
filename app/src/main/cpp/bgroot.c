@@ -10,7 +10,8 @@
  *   --probe [--hold 秒]                创建设备并保持（验证用）
  *   --tap X Y [--dur MS]               单次点击后退出
  *   --swipe X1 Y1 X2 Y2 [--dur MS]     滑动后退出
- *   --server --sock PATH [--uid UID]   常驻；仅接受 --uid 指定进程连接
+ *   --server --sock PATH [--uid UID] [--app-pid PID]
+ *          常驻；仅接受 --uid 进程连接，app 消失自动退出
  *
  * 协议（行文本，回复 OK / ERR <原因>）：
  *   PING                -> OK pong
@@ -50,6 +51,7 @@ static int scr_w = 0;
 static int scr_h = 0;
 static int next_tid = 1;
 static volatile sig_atomic_t running = 1;
+static int app_pid = 0;
 
 static long now_ms(void) {
     struct timespec ts;
@@ -365,6 +367,10 @@ static int run_server(const char *sock_path, int allow_uid) {
     fflush(stderr);
 
     while (running) {
+        if (app_pid > 0 && kill(app_pid, 0) != 0 && errno == ESRCH) {
+            fprintf(stderr, "app process gone, helper exit\n");
+            break;
+        }
         int cfd = accept(sfd, NULL, NULL);
         if (cfd < 0) {
             if (errno == EINTR) continue;
@@ -443,6 +449,7 @@ int main(int argc, char **argv) {
     /* 屏幕尺寸：优先命令行参数，否则 wm size 探测，最后兜底 */
     scr_w = arg_value(argc, argv, "--w", 0);
     scr_h = arg_value(argc, argv, "--h", 0);
+    app_pid = arg_value(argc, argv, "--app-pid", 0);
     if (scr_w <= 0 || scr_h <= 0) {
         if (!detect_screen()) {
             scr_w = 1080;
