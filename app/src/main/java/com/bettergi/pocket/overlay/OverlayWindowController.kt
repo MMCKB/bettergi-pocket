@@ -127,6 +127,11 @@ class OverlayWindowController(
     private var logTitle: TextView? = null
     private var logText: TextView? = null
     private var logScroll: ScrollView? = null
+    private var logFilterTag: String? = null
+    private var logFilterAll: TextView? = null
+    private var logFilterAutoSkip: TextView? = null
+    private var logFilterRoot: TextView? = null
+    private var logFilterOther: TextView? = null
     private var logHandleParams: WindowManager.LayoutParams? = null
     private var logBodyParams: WindowManager.LayoutParams? = null
     private val logLines = ArrayDeque<String>(MAX_LOG_LINES)
@@ -578,6 +583,7 @@ class OverlayWindowController(
 
     override fun onTalkHistoryMatched() {
         mainHandler.post {
+            AppLog.i("BetterGI.AutoSkip", "检测到对话（TalkHistory 命中）")
             talkingUntilMs = System.currentTimeMillis() + TALKING_HOLD_MS
             mainHandler.removeCallbacks(clearTalkingRunnable)
             mainHandler.postDelayed(clearTalkingRunnable, TALKING_HOLD_MS)
@@ -586,33 +592,33 @@ class OverlayWindowController(
     }
 
     override fun onChatIconsRecognized(count: Int, topX: Int, topY: Int) {
-        appendLog("识别到对话选项 ${count} 个，最高位置 ($topX, $topY)")
+        AppLog.i("BetterGI.AutoSkip", "识别到对话选项 $count 个，最高位置 ($topX, $topY)")
     }
 
     override fun onChatIconClicked(x: Int, y: Int) {
-        appendLog("点击对话选项 ($x, $y)")
+        AppLog.i("BetterGI.AutoSkip", "点击对话选项 ($x, $y)")
     }
 
     override fun onAutoSkipLog(message: String) {
-        appendLog(message)
+        AppLog.i("BetterGI.AutoSkip", message)
     }
 
     override fun onBlackScreenClicked(x: Int, y: Int) {
-        appendLog("点击黑屏转场 ($x, $y)")
+        AppLog.i("BetterGI.AutoSkip", "点击黑屏转场 ($x, $y)")
     }
 
     override fun onOptionTextsRecognized(texts: List<String>) {
         if (texts.isNotEmpty()) {
-            appendLog("选项文字：${texts.joinToString("、")}")
+            AppLog.i("BetterGI.AutoSkip", "选项文字：${texts.joinToString("、")}")
         }
     }
 
     override fun onPauseBlocked(text: String) {
-        appendLog("跳过选项：$text")
+        AppLog.w("BetterGI.AutoSkip", "暂停词拦截：$text")
     }
 
     override fun onIdleScan() {
-        appendLog("扫描中，未检测到对话…")
+        AppLog.d("BetterGI.AutoSkip", "扫描中，未检测到对话…")
     }
 
 
@@ -628,7 +634,7 @@ class OverlayWindowController(
             }
             logLines.addLast(line)
             if (!logWindowVisible || logText == null) return@post
-            logText?.text = logLines.joinToString("\n")
+            renderLogs()
             val scroll = logScroll ?: return@post
             val child = scroll.getChildAt(0) ?: return@post
             val atBottom = scroll.scrollY >= child.height - scroll.height - 4
@@ -636,6 +642,45 @@ class OverlayWindowController(
                 scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
             }
         }
+    }
+
+    /** 按当前过滤标签渲染日志面板内容。 */
+    private fun renderLogs() {
+        if (logLines.isEmpty()) return
+        val filter = logFilterTag
+        val text = if (filter == null) {
+            logLines.joinToString("\n")
+        } else {
+            logLines.filter { logTagOf(it) == filter }.joinToString("\n")
+        }
+        logText?.text = text.ifEmpty { "（无此功能日志）" }
+    }
+
+    /** 解析日志行的功能标签：对话 / root / 其他。 */
+    private fun logTagOf(line: String): String? {
+        return when {
+            line.contains("[BetterGI.AutoSkip]") -> "autoskip"
+            line.contains("[BetterGI.Root]") || line.contains("[helper]") || line.contains("root backend") -> "root"
+            else -> "other"
+        }
+    }
+
+    private fun setLogFilter(tag: String?) {
+        logFilterTag = tag
+        refreshLogFilterChips()
+        renderLogs()
+    }
+
+    private fun refreshLogFilterChips() {
+        val active = ContextCompat.getColor(themedContext, R.color.overlay_log_green)
+        val muted = ContextCompat.getColor(themedContext, R.color.overlay_text_muted)
+        fun tint(view: TextView?, isActive: Boolean) {
+            view?.setTextColor(if (isActive) active else muted)
+        }
+        tint(logFilterAll, logFilterTag == null)
+        tint(logFilterAutoSkip, logFilterTag == "autoskip")
+        tint(logFilterRoot, logFilterTag == "root")
+        tint(logFilterOther, logFilterTag == "other")
     }
 
     /** 在点击位置闪现一个圆点（设置开启时），用于可视化自动点击位置。 */
@@ -800,6 +845,11 @@ class OverlayWindowController(
         logTitle = handle.findViewById(R.id.overlay_log_title)
         logText = body.findViewById(R.id.overlay_log_text)
         logScroll = body.findViewById(R.id.overlay_log_scroll)
+        logFilterAll = body.findViewById(R.id.overlay_log_filter_all)
+        logFilterAutoSkip = body.findViewById(R.id.overlay_log_filter_autoskip)
+        logFilterRoot = body.findViewById(R.id.overlay_log_filter_root)
+        logFilterOther = body.findViewById(R.id.overlay_log_filter_other)
+        setLogFilter(null)
 
         val width = dp(LOG_WIDTH_DP)
         val (defaultX, defaultY) = defaultLogPosition()
@@ -836,10 +886,10 @@ class OverlayWindowController(
             windowManager.addView(handle, handleParams)
             handle.post {
                 clampLogWindows()
-                if (logLines.isNotEmpty()) {
-                    logText?.text = logLines.joinToString("\n")
-                    logScroll?.post { logScroll?.fullScroll(View.FOCUS_DOWN) }
-                }
+                renderLogs()
+                logScroll?.post { logScroll?.fullScroll(View.FOCUS_DOWN) }
+                val settings = settingsRepository.get()
+                appendLog("状态：root=${if (RootBridge.isRunning()) "已连接" else "未连接"} 共享=${if (settings.screenShareEnabled) "开" else "关"} 对话=${if (settings.autoSkipEnabled) "开" else "关"} 拾取=${if (settings.autoPickEnabled) "开" else "关"}")
             }
         } catch (_: Throwable) {
             hideLogWindow()
@@ -862,6 +912,10 @@ class OverlayWindowController(
         logTitle = null
         logText = null
         logScroll = null
+        logFilterAll = null
+        logFilterAutoSkip = null
+        logFilterRoot = null
+        logFilterOther = null
     }
 
     private fun overlayParams(

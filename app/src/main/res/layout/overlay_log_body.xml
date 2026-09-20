@@ -1,8 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="260dp"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_overlay_log_body">
+    android:background="@drawable/bg_overlay_log_body"
+    android:orientation="vertical">
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:overScrollMode="never"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp"
+            android:paddingTop="6dp">
+
+            <TextView
+                android:id="@+id/overlay_log_filter_all"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:paddingHorizontal="4dp"
+                android:text="全部"
+                android:textColor="@color/overlay_log_green"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/overlay_log_filter_autoskip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:paddingHorizontal="4dp"
+                android:text="对话"
+                android:textColor="@color/overlay_text_muted"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/overlay_log_filter_root"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:paddingHorizontal="4dp"
+                android:text="root"
+                android:textColor="@color/overlay_text_muted"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/overlay_log_filter_other"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="4dp"
+                android:text="其他"
+                android:textColor="@color/overlay_text_muted"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </HorizontalScrollView>
 
     <ScrollView
         android:id="@+id/overlay_log_scroll"
@@ -25,4 +80,4 @@
             android:textColor="@color/overlay_log_green"
             android:textSize="10sp" />
     </ScrollView>
-</FrameLayout>
+</LinearLayout>

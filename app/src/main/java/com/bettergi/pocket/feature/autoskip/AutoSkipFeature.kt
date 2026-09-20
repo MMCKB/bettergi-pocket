@@ -136,6 +136,7 @@ class AutoSkipFeature(
 
             State.CONFIRMING -> {
                 if (!inDialogue(content)) {
+                    events?.onAutoSkipLog("对话已结束（点击生效）")
                     state = State.IDLE
                     return
                 }
@@ -146,12 +147,14 @@ class AutoSkipFeature(
 
                 val changed = top == null || top.y != clickedOptionY || hits.none { it.y == clickedOptionY }
                 if (changed) {
+                    events?.onAutoSkipLog("选项已变化，点击生效")
                     state = State.IN_DIALOG
                     clickedOptionY = -1
                     return
                 }
                 if (now - clickedAtMs >= CONFIRM_TIMEOUT_MS) {
                     Log.w(TAG, "option did not change within ${CONFIRM_TIMEOUT_MS}ms, allow retry")
+                    events?.onAutoSkipLog("选项未变化，超时重试")
                     state = State.IN_DIALOG
                     clickedAtMs = 0L
                 }

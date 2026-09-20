@@ -51,6 +51,8 @@ object AppLog {
 
     fun i(tag: String, message: String) = write(Log.INFO, tag, message)
 
+    fun d(tag: String, message: String) = write(Log.DEBUG, tag, message)
+
     fun w(tag: String, message: String) = write(Log.WARN, tag, message)
 
     fun e(tag: String, message: String) = write(Log.ERROR, tag, message)
