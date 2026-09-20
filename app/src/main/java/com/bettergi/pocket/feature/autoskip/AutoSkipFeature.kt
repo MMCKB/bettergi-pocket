@@ -19,8 +19,7 @@ import org.opencv.core.Scalar
 
 /**
  * 自动对话（移植 PC 版 AutoSkip 核心，去掉语音/弹窗/邀约）：
- * 感叹号优先、选项 OCR + 关键词决策、橙色关键选项、
- * 状态机 + 点击确认、黑屏转场点击。
+ * 感叹号优先、选项 OCR + 关键词决策、状态机 + 点击确认、黑屏转场点击。
  */
 class AutoSkipFeature(
     private val assets: RecognitionAssets,

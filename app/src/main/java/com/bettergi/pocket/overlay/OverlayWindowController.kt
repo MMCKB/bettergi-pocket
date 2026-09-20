@@ -94,7 +94,6 @@ class OverlayWindowController(
     private var updatingUi = false
     private var expanded = false
     private var transforming = false
-    private var pendingCollapseOnOutside = false
     private var switchEnabled: SwitchCompat? = null
     private var switchAutoSkip: SwitchCompat? = null
     private var switchQuickSkip: SwitchCompat? = null
@@ -109,6 +108,7 @@ class OverlayWindowController(
     private var tapIndicatorParams: WindowManager.LayoutParams? = null
     private var switchAutoPick: SwitchCompat? = null
     private var switchAutoLaunch: SwitchCompat? = null
+    private var switchSnapEdge: SwitchCompat? = null
     private var launchHint: TextView? = null
     private var launchSubtitle: TextView? = null
     private var logToggleButton: ImageButton? = null
@@ -189,6 +189,7 @@ class OverlayWindowController(
         val exclamationSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_exclamation)
         val autoPickSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_auto_pick)
         val autoLaunchSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_auto_launch)
+        val snapEdgeSwitch = root.findViewById<SwitchCompat>(R.id.overlay_switch_snap_edge)
         val logToggle = root.findViewById<ImageButton>(R.id.overlay_log_toggle)
 
         bubbleView = bubble
@@ -211,6 +212,7 @@ class OverlayWindowController(
         switchExclamation = exclamationSwitch
         switchAutoPick = autoPickSwitch
         switchAutoLaunch = autoLaunchSwitch
+        switchSnapEdge = snapEdgeSwitch
         launchHint = root.findViewById(R.id.overlay_auto_launch_hint)
         launchSubtitle = root.findViewById(R.id.overlay_launch_subtitle)
         logToggleButton = logToggle
@@ -238,7 +240,6 @@ class OverlayWindowController(
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
@@ -251,7 +252,7 @@ class OverlayWindowController(
         setupDragAndClick(bubble, layoutParams) {
             setExpanded(true)
         }
-        setupDrag(header, layoutParams, snapOnRelease = false)
+        setupDrag(header, layoutParams)
         collapse.setOnClickListener { setExpanded(false) }
         logToggle.setOnClickListener { setLogWindowVisible(!logWindowVisible) }
         rowAutoSkip?.setOnClickListener { setAutoSkipMenuExpanded(!autoSkipMenuExpanded) }
@@ -301,6 +302,14 @@ class OverlayWindowController(
             if (updatingUi) return@setOnCheckedChangeListener
             settingsRepository.setAutoLaunchGenshinEnabled(isChecked)
         }
+        switchSnapEdge?.isChecked = prefs.getBoolean(KEY_SNAP_EDGE, true)
+        snapEdgeSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (updatingUi) return@setOnCheckedChangeListener
+            prefs.edit().putBoolean(KEY_SNAP_EDGE, isChecked).apply()
+            if (isChecked) {
+                params?.let { snapToEdge(it, animate = true) }
+            }
+        }
         rootView = root
         params = layoutParams
         windowManager.addView(root, layoutParams)
@@ -316,7 +325,7 @@ class OverlayWindowController(
         root.post {
             rememberScreen()
             clampToScreen(layoutParams)
-            if (!expanded) snapToEdge(layoutParams, animate = false)
+            if (!expanded) snapToEdgeIfEnabled(layoutParams, animate = false)
             scheduleIdleFade()
         }
     }
@@ -389,7 +398,6 @@ class OverlayWindowController(
         snapAnimator = null
         transforming = false
         expanded = false
-        pendingCollapseOnOutside = false
         talkingUntilMs = 0L
         hideLogWindow()
         val view = rootView ?: return
@@ -417,6 +425,7 @@ class OverlayWindowController(
         releaseTapIndicator()
         switchAutoPick = null
         switchAutoLaunch = null
+        switchSnapEdge = null
         launchHint = null
         launchSubtitle = null
         logToggleButton = null
@@ -430,15 +439,6 @@ class OverlayWindowController(
         autoSkipChevron = null
         launchExtras = null
         launchChevron = null
-    }
-
-    private fun collapseOnOutsideTouch() {
-        if (!expanded) return
-        if (transforming) {
-            pendingCollapseOnOutside = true
-            return
-        }
-        setExpanded(false)
     }
 
     private fun launchGenshinFromButton() {
@@ -493,7 +493,6 @@ class OverlayWindowController(
         val root = rootView ?: return
         expanded = value
         transforming = true
-        if (!value) pendingCollapseOnOutside = false
         bubble.animate().cancel()
         panel.animate().cancel()
         val ease = PathInterpolator(0.22f, 1f, 0.36f, 1f)
@@ -528,10 +527,6 @@ class OverlayWindowController(
                     .setInterpolator(ease)
                     .withEndAction {
                         transforming = false
-                        if (pendingCollapseOnOutside) {
-                            pendingCollapseOnOutside = false
-                            setExpanded(false)
-                        }
                     }
                     .start()
             }
@@ -562,7 +557,7 @@ class OverlayWindowController(
                 .setInterpolator(ease)
                 .withEndAction {
                     transforming = false
-                    params?.let { snapToEdge(it, animate = true) }
+                    params?.let { snapToEdgeIfEnabled(it, animate = true) }
                     scheduleIdleFade()
                 }
                 .start()
@@ -978,7 +973,6 @@ class OverlayWindowController(
     private fun setupDrag(
         dragHandle: View,
         lp: WindowManager.LayoutParams,
-        snapOnRelease: Boolean,
     ) {
         var startX = 0
         var startY = 0
@@ -1003,9 +997,6 @@ class OverlayWindowController(
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     persistPosition(lp)
-                    if (snapOnRelease && !expanded) {
-                        snapToEdge(lp, animate = true)
-                    }
                     true
                 }
                 else -> false
@@ -1057,7 +1048,7 @@ class OverlayWindowController(
                         onClick()
                     } else {
                         persistPosition(lp)
-                        snapToEdge(lp, animate = true)
+                        snapToEdgeIfEnabled(lp, animate = true)
                     }
                     if (!expanded) scheduleIdleFade()
                     true
@@ -1066,7 +1057,7 @@ class OverlayWindowController(
                     dragHandle.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
                     if (moved) {
                         persistPosition(lp)
-                        snapToEdge(lp, animate = true)
+                        snapToEdgeIfEnabled(lp, animate = true)
                     }
                     if (!expanded) scheduleIdleFade()
                     true
@@ -1074,6 +1065,15 @@ class OverlayWindowController(
                 else -> false
             }
         }
+    }
+
+    private fun snapToEdgeIfEnabled(lp: WindowManager.LayoutParams, animate: Boolean) {
+        if (!prefs.getBoolean(KEY_SNAP_EDGE, true)) {
+            clampToScreen(lp)
+            persistPosition(lp)
+            return
+        }
+        snapToEdge(lp, animate)
     }
 
     private fun snapToEdge(lp: WindowManager.LayoutParams, animate: Boolean) {
@@ -1179,7 +1179,7 @@ class OverlayWindowController(
             val lp = params ?: return@post
             clampToScreen(lp)
             if (!expanded) {
-                snapToEdge(lp, animate = false)
+                snapToEdgeIfEnabled(lp, animate = false)
             } else {
                 persistPosition(lp)
             }
@@ -1229,6 +1229,7 @@ class OverlayWindowController(
         private const val KEY_LOG_VISIBLE = "log_visible"
         private const val KEY_AUTO_SKIP_EXPANDED = "auto_skip_expanded"
         private const val KEY_LAUNCH_EXPANDED = "launch_expanded"
+        private const val KEY_SNAP_EDGE = "snap_edge"
         private const val LOG_WIDTH_DP = 260
         private const val LOG_DEFAULT_HEIGHT_DP = 148
         private const val IDLE_ALPHA = 0.62f
