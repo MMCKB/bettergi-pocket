@@ -3,6 +3,7 @@ package com.bettergi.pocket.root
 import com.bettergi.pocket.input.AutomationAction
 import com.bettergi.pocket.input.AutomationController
 import com.bettergi.pocket.input.BackAction
+import com.bettergi.pocket.log.AppLog
 import com.bettergi.pocket.input.ClickAction
 
 /**
@@ -15,8 +16,16 @@ class RootAutomationController(
 
     override fun execute(action: AutomationAction) {
         when (action) {
-            is ClickAction -> bridge.tap(action.x, action.y, action.durationMs)
+            is ClickAction -> {
+                if (!bridge.tap(action.x, action.y, action.durationMs)) {
+                    AppLog.w(TAG, "click injection failed at ${action.x},${action.y}")
+                }
+            }
             BackAction -> bridge.back()
         }
+    }
+
+    private companion object {
+        const val TAG = "BetterGI.Input"
     }
 }

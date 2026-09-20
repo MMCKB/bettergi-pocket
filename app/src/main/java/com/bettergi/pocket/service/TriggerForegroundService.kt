@@ -22,6 +22,7 @@ import com.bettergi.pocket.feature.autoskip.OptionKeywords
 import com.bettergi.pocket.genshin.GenshinLaunchMonitor
 import com.bettergi.pocket.genshin.GenshinLauncher
 import com.bettergi.pocket.genshin.GenshinPackages
+import com.bettergi.pocket.log.AppLog
 import com.bettergi.pocket.root.RootAutomationController
 import com.bettergi.pocket.root.RootBridge
 import com.bettergi.pocket.root.RootStatusProbe
@@ -60,6 +61,7 @@ class TriggerForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        AppLog.i(TAG, "service created")
         settingsRepository = TriggerSettingsRepository(applicationContext)
         captureController = ScreenCaptureController(applicationContext) {
             if (settingsRepository.get().screenShareEnabled) {
@@ -69,6 +71,7 @@ class TriggerForegroundService : Service() {
                     "屏幕共享已停止，可能被其他录制应用占用",
                     Toast.LENGTH_SHORT,
                 ).show()
+                AppLog.w(TAG, "screen share stopped unexpectedly")
             }
         }
         genshinLauncher = GenshinLauncher(applicationContext)
@@ -106,6 +109,7 @@ class TriggerForegroundService : Service() {
         settingsRepository.addListener(settingsListener)
         Thread {
             val ok = RootBridge.start()
+            AppLog.i(TAG, "root backend start -> $ok")
             mainHandler.post { overlayController.refreshStatus() }
             if (!ok) {
                 mainHandler.post {
@@ -121,6 +125,7 @@ class TriggerForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        AppLog.i(TAG, "onStartCommand action=${intent?.action}")
         when (intent?.action) {
             ACTION_START -> {
                 startInForeground(sharing = captureController.isRunning())
@@ -162,6 +167,7 @@ class TriggerForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        AppLog.i(TAG, "service destroyed")
         settingsRepository.removeListener(settingsListener)
         shutdown()
         super.onDestroy()
@@ -172,6 +178,7 @@ class TriggerForegroundService : Service() {
     private fun shutdown() {
         if (shutDown) return
         shutDown = true
+        AppLog.i(TAG, "service shutting down")
         RootBridge.stop()
         genshinLaunchMonitor.stop()
         engine.release()
@@ -264,6 +271,7 @@ class TriggerForegroundService : Service() {
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_RESULT_DATA = "extra_result_data"
 
+        private const val TAG = "BetterGI.Service"
         private const val NOTIFICATION_CHANNEL_ID = "bettergi_pocket_trigger"
         private const val NOTIFICATION_ID = 1001
     }

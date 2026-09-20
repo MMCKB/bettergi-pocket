@@ -42,6 +42,7 @@ import com.bettergi.pocket.feature.autoskip.AutoSkipEvents
 import com.bettergi.pocket.genshin.GenshinLaunchResult
 import com.bettergi.pocket.genshin.GenshinLauncher
 import com.bettergi.pocket.genshin.GenshinPackages
+import com.bettergi.pocket.log.AppLog
 import com.bettergi.pocket.root.RootBridge
 import com.bettergi.pocket.settings.TriggerSettings
 import com.bettergi.pocket.settings.TriggerSettingsRepository
@@ -131,6 +132,11 @@ class OverlayWindowController(
     private var logHandleParams: WindowManager.LayoutParams? = null
     private var logBodyParams: WindowManager.LayoutParams? = null
     private val logLines = ArrayDeque<String>(MAX_LOG_LINES)
+    private val logSink = object : AppLog.Sink {
+        override fun onLog(line: String) {
+            appendLogLine(line)
+        }
+    }
     private var logWindowVisible = false
     private var talkingUntilMs: Long = 0L
     private val logTimeFormat = SimpleDateFormat("HH:mm:ss", Locale.CHINA)
@@ -299,6 +305,7 @@ class OverlayWindowController(
         setLaunchMenuExpanded(prefs.getBoolean(KEY_LAUNCH_EXPANDED, false), persist = false)
         settingsRepository.addListener(settingsListener)
         startScreenWatch()
+        AppLog.addSink(logSink)
         mainHandler.post { refreshStatus() }
         root.post {
             rememberScreen()
@@ -367,6 +374,7 @@ class OverlayWindowController(
 
     fun hide() {
         stopScreenWatch()
+        AppLog.removeSink(logSink)
         mainHandler.removeCallbacks(idleFadeRunnable)
         mainHandler.removeCallbacks(clearTalkingRunnable)
         snapAnimator?.cancel()
@@ -607,9 +615,13 @@ class OverlayWindowController(
 
 
     private fun appendLog(message: String) {
+        appendLogLine("${logTimeFormat.format(Date())} $message")
+    }
+
+    /** 追加一行已格式化的日志（供 AppLog sink 使用，不再补时间戳） */
+    private fun appendLogLine(line: String) {
         mainHandler.post {
             if (!logWindowVisible || logText == null) return@post
-            val line = "${logTimeFormat.format(Date())} $message"
             if (logLines.size >= MAX_LOG_LINES) {
                 logLines.removeFirst()
             }

@@ -4,7 +4,7 @@ import android.content.Context
 import android.net.LocalSocket
 import android.net.LocalSocketAddress
 import android.os.Process
-import android.util.Log
+import com.bettergi.pocket.log.AppLog
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -92,16 +92,17 @@ object RootBridge {
         val process = try {
             ProcessBuilder("sh", "-c", cmd).redirectErrorStream(false).start()
         } catch (e: Exception) {
-            Log.e(TAG, "start helper failed", e)
+            AppLog.e(TAG, "start helper failed", e)
             return false
         }
         helperProcess = process
+        drainHelperOutput(process, "helper")
 
         val deadline = System.currentTimeMillis() + CONNECT_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
             Thread.sleep(60)
             if (!process.isAlive) {
-                Log.e(TAG, "helper exited early, code=${process.exitValue()}")
+                AppLog.e(TAG, "helper exited early, code=${process.exitValue()}")
                 return false
             }
             val s = tryConnect(sockPath) ?: continue
@@ -111,7 +112,7 @@ object RootBridge {
             val pong = request("PING", PING_TIMEOUT_MS)
             if (pong == "pong") {
                 running = true
-                Log.i(TAG, "root backend connected")
+                AppLog.i(TAG, "root backend connected")
                 applyKeepAlive()
                 return true
             }
@@ -121,7 +122,7 @@ object RootBridge {
             }
             return false
         }
-        Log.e(TAG, "connect to helper timed out")
+        AppLog.e(TAG, "connect to helper timed out")
         return false
     }
 
@@ -131,7 +132,7 @@ object RootBridge {
         val source = try {
             ctx.assets.open(HELPER_ASSET)
         } catch (e: Exception) {
-            Log.e(TAG, "asset missing: $HELPER_ASSET", e)
+            AppLog.e(TAG, "asset missing: $HELPER_ASSET", e)
             return false
         }
         return try {
@@ -140,7 +141,7 @@ object RootBridge {
             }
             true
         } catch (e: Exception) {
-            Log.e(TAG, "release helper failed", e)
+            AppLog.e(TAG, "release helper failed", e)
             false
         }
     }
@@ -169,18 +170,28 @@ object RootBridge {
             }
             line
         } catch (e: Exception) {
-            Log.w(TAG, "request failed: $cmd -> ${e.message}")
+            AppLog.w(TAG, "request failed: $cmd -> ${e.message}")
             running = false
             null
         }
     }
 
-    fun tap(x: Int, y: Int, durationMs: Long) {
-        request("TAP $x $y $durationMs", 2000L)
+    fun tap(x: Int, y: Int, durationMs: Long): Boolean {
+        val resp = request("TAP $x $y $durationMs", 2000L)
+        if (resp == null || !resp.startsWith("OK")) {
+            AppLog.w(TAG, "tap failed at $x,$y (resp=$resp)")
+            return false
+        }
+        return true
     }
 
-    fun back() {
-        request("BACK", 2000L)
+    fun back(): Boolean {
+        val resp = request("BACK", 2000L)
+        if (resp == null || !resp.startsWith("OK")) {
+            AppLog.w(TAG, "back failed (resp=$resp)")
+            return false
+        }
+        return true
     }
 
     fun foreground(): String? {
@@ -224,12 +235,13 @@ object RootBridge {
         val pkg = appContext?.packageName ?: return
         if (request("KEEPALIVE $pkg", 3000L)?.startsWith("OK") == true) {
             keepAliveApplied = true
-            Log.i(TAG, "keep-alive applied for $pkg")
+            AppLog.i(TAG, "keep-alive applied for $pkg")
         }
     }
 
     @Synchronized
     fun stop() {
+        if (running) AppLog.i(TAG, "root backend stopping")
         running = false
         try {
             output?.write("QUIT\n".toByteArray(Charsets.UTF_8))
@@ -248,6 +260,24 @@ object RootBridge {
         output = null
         reader = null
         helperProcess = null
+    }
+
+    /** 逐行消费 helper 的 stdout/stderr：写满管道会阻塞 helper 主循环，必须读 */
+    private fun drainHelperOutput(process: Process, prefix: String) {
+        for (stream in listOf(process.inputStream, process.errorStream)) {
+            val thread = Thread {
+                try {
+                    stream.bufferedReader().useLines { lines ->
+                        lines.forEach { line ->
+                            if (line.isNotBlank()) AppLog.i(TAG, "[$prefix] $line")
+                        }
+                    }
+                } catch (_: Throwable) {
+                }
+            }
+            thread.isDaemon = true
+            thread.start()
+        }
     }
 
     private fun runCommand(ctx: Context, command: String, timeoutMs: Long): String? {
