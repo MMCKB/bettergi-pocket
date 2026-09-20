@@ -65,26 +65,6 @@
             android:exported="false"
             android:foregroundServiceType="dataSync|mediaProjection" />
 
-        <service
-            android:name=".input.InputAccessibilityService"
-            android:exported="true"
-            android:label="@string/accessibility_service_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:process=":a11y"
-            android:stopWithTask="false">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service_config" />
-        </service>
-
-        <provider
-            android:name=".input.AccessibilityBridgeProvider"
-            android:authorities="${applicationId}.a11y"
-            android:exported="false"
-            android:process=":a11y" />
     </application>
 
 </manifest>

@@ -8,7 +8,9 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.widget.Toast
 import com.bettergi.pocket.MainActivity
 import com.bettergi.pocket.R
@@ -19,8 +21,10 @@ import com.bettergi.pocket.feature.autoskip.AutoSkipFeature
 import com.bettergi.pocket.feature.autoskip.OptionKeywords
 import com.bettergi.pocket.genshin.GenshinLaunchMonitor
 import com.bettergi.pocket.genshin.GenshinLauncher
-import com.bettergi.pocket.input.AccessibilityAutomationController
-import com.bettergi.pocket.input.InputAccessibilityService
+import com.bettergi.pocket.genshin.GenshinPackages
+import com.bettergi.pocket.root.RootAutomationController
+import com.bettergi.pocket.root.RootBridge
+import com.bettergi.pocket.root.RootStatusProbe
 import com.bettergi.pocket.overlay.OverlayWindowController
 import com.bettergi.pocket.recognition.RecognitionAssets
 import com.bettergi.pocket.settings.TriggerSettings
@@ -34,6 +38,8 @@ class TriggerForegroundService : Service() {
     private lateinit var genshinLauncher: GenshinLauncher
     private lateinit var genshinLaunchMonitor: GenshinLaunchMonitor
     private lateinit var engine: TriggerEngine
+    private val rootProbe = RootStatusProbe()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     @Volatile
     private var requestingCapturePermission = false
@@ -80,7 +86,7 @@ class TriggerForegroundService : Service() {
         genshinLaunchMonitor = GenshinLaunchMonitor(
             settingsRepository = settingsRepository,
             launcher = genshinLauncher,
-            isGenshinInForeground = { InputAccessibilityService.isGenshinInForeground() },
+            isGenshinInForeground = { rootProbe.foregroundPackage()?.let { GenshinPackages.isGenshinPackage(it) } },
             canAutoLaunch = { !requestingCapturePermission && !shutDown },
         )
         val recognitionAssets = RecognitionAssets(applicationContext.assets)
@@ -95,9 +101,22 @@ class TriggerForegroundService : Service() {
                     OptionKeywords.load(applicationContext.assets),
                 ),
             ),
-            actionController = AccessibilityAutomationController(overlayController),
+            actionController = RootAutomationController(),
         )
         settingsRepository.addListener(settingsListener)
+        Thread {
+            val ok = RootBridge.start()
+            mainHandler.post { overlayController.refreshStatus() }
+            if (!ok) {
+                mainHandler.post {
+                    Toast.makeText(
+                        applicationContext,
+                        "本版本需要 root 权限",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
+        }.start()
         genshinLaunchMonitor.start()
     }
 
@@ -106,7 +125,6 @@ class TriggerForegroundService : Service() {
             ACTION_START -> {
                 startInForeground(sharing = captureController.isRunning())
                 overlayController.show()
-                InputAccessibilityService.promptIfDisconnected(applicationContext)
             }
             ACTION_STOP -> {
                 shutdown()
@@ -131,7 +149,6 @@ class TriggerForegroundService : Service() {
                     startInForeground(sharing = true)
                     captureController.start(resultCode, resultData)
                     engine.start()
-                    InputAccessibilityService.ensureEnabled(applicationContext)
                 } else {
                     settingsRepository.setScreenShareEnabled(false)
                 }
@@ -155,7 +172,7 @@ class TriggerForegroundService : Service() {
     private fun shutdown() {
         if (shutDown) return
         shutDown = true
-        InputAccessibilityService.cancelRecoverCheck()
+        RootBridge.stop()
         genshinLaunchMonitor.stop()
         engine.release()
         captureController.stop()

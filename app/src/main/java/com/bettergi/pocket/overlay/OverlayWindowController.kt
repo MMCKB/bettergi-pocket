@@ -42,8 +42,7 @@ import com.bettergi.pocket.feature.autoskip.AutoSkipEvents
 import com.bettergi.pocket.genshin.GenshinLaunchResult
 import com.bettergi.pocket.genshin.GenshinLauncher
 import com.bettergi.pocket.genshin.GenshinPackages
-import com.bettergi.pocket.input.AccessibilityServiceHealth
-import com.bettergi.pocket.input.InputAccessibilityService
+import com.bettergi.pocket.root.RootBridge
 import com.bettergi.pocket.settings.TriggerSettings
 import com.bettergi.pocket.settings.TriggerSettingsRepository
 import java.text.SimpleDateFormat
@@ -138,18 +137,6 @@ class OverlayWindowController(
     private val clearTalkingRunnable = Runnable { refreshStatus() }
 
     private val idleFadeRunnable = Runnable { fadeBubble(IDLE_ALPHA) }
-    private var a11yWarningReady = false
-    private val refreshA11ySoon = Runnable { refreshStatus() }
-    private val refreshA11yLater = Runnable {
-        a11yWarningReady = true
-        refreshStatus()
-    }
-    private var a11yReceiverRegistered = false
-    private val a11yReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            refreshStatus()
-        }
-    }
 
     private val settingsListener: (TriggerSettings) -> Unit = { settings ->
         updatingUi = true
@@ -197,8 +184,8 @@ class OverlayWindowController(
         statusDot = root.findViewById(R.id.overlay_status_dot)
         statusText = root.findViewById<TextView>(R.id.overlay_status_text).also { text ->
             text.setOnClickListener {
-                if (InputAccessibilityService.health(themedContext) != AccessibilityServiceHealth.State.CONNECTED) {
-                    InputAccessibilityService.ensureEnabled(themedContext)
+                if (!RootBridge.isRunning()) {
+                    Thread { RootBridge.start() }.start()
                 }
             }
         }
@@ -267,9 +254,6 @@ class OverlayWindowController(
         autoSkipSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (updatingUi) return@setOnCheckedChangeListener
             settingsRepository.setAutoSkipEnabled(isChecked)
-            if (isChecked) {
-                InputAccessibilityService.ensureEnabled(themedContext, "请开启无障碍权限，才能模拟点击对话选项")
-            }
         }
         quickSkipSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (updatingUi) return@setOnCheckedChangeListener
@@ -294,9 +278,6 @@ class OverlayWindowController(
         autoPickSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (updatingUi) return@setOnCheckedChangeListener
             settingsRepository.setAutoPickEnabled(isChecked)
-            if (isChecked) {
-                InputAccessibilityService.ensureEnabled(themedContext, "请开启无障碍权限，才能模拟点击拾取")
-            }
         }
         autoLaunchSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (updatingUi) return@setOnCheckedChangeListener
@@ -318,10 +299,7 @@ class OverlayWindowController(
         setLaunchMenuExpanded(prefs.getBoolean(KEY_LAUNCH_EXPANDED, false), persist = false)
         settingsRepository.addListener(settingsListener)
         startScreenWatch()
-        a11yWarningReady = false
-        registerA11yReceiver()
-        mainHandler.postDelayed(refreshA11ySoon, 400L)
-        mainHandler.postDelayed(refreshA11yLater, 2000L)
+        mainHandler.post { refreshStatus() }
         root.post {
             rememberScreen()
             clampToScreen(layoutParams)
@@ -389,11 +367,8 @@ class OverlayWindowController(
 
     fun hide() {
         stopScreenWatch()
-        unregisterA11yReceiver()
         mainHandler.removeCallbacks(idleFadeRunnable)
         mainHandler.removeCallbacks(clearTalkingRunnable)
-        mainHandler.removeCallbacks(refreshA11ySoon)
-        mainHandler.removeCallbacks(refreshA11yLater)
         snapAnimator?.cancel()
         snapAnimator = null
         transforming = false
@@ -744,33 +719,12 @@ class OverlayWindowController(
 
     private fun isTalking(): Boolean = System.currentTimeMillis() < talkingUntilMs
 
-    private fun registerA11yReceiver() {
-        if (a11yReceiverRegistered) return
-        ContextCompat.registerReceiver(
-            context,
-            a11yReceiver,
-            IntentFilter(InputAccessibilityService.ACTION_STATE_CHANGED),
-            ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
-        a11yReceiverRegistered = true
-    }
-
-    private fun unregisterA11yReceiver() {
-        if (!a11yReceiverRegistered) return
-        try {
-            context.unregisterReceiver(a11yReceiver)
-        } catch (_: Exception) {
-        }
-        a11yReceiverRegistered = false
-    }
-
-    private fun refreshStatus() {
+    fun refreshStatus() {
         val enabled = settingsRepository.get().screenShareEnabled
         val talking = isTalking()
-        val a11yDisconnected = a11yWarningReady &&
-            InputAccessibilityService.health(themedContext) == AccessibilityServiceHealth.State.DISCONNECTED
+        val rootOk = RootBridge.isRunning()
         val colorRes = when {
-            a11yDisconnected -> R.color.overlay_status_warn
+            !rootOk -> R.color.overlay_status_warn
             talking -> R.color.overlay_status_on
             enabled -> R.color.overlay_status_on
             else -> R.color.overlay_status_off
@@ -781,14 +735,14 @@ class OverlayWindowController(
                 DrawableCompat.setTint(DrawableCompat.wrap(drawable).mutate(), color)
             }
         statusText?.text = when {
-            a11yDisconnected -> "无障碍异常"
+            !rootOk -> "root 未连接"
             talking -> "正在对话中"
             enabled -> "已启动"
             else -> "未启动"
         }
         statusText?.setTextColor(
             when {
-                a11yDisconnected -> ContextCompat.getColor(themedContext, R.color.overlay_status_warn)
+                !rootOk -> ContextCompat.getColor(themedContext, R.color.overlay_status_warn)
                 talking || enabled -> ContextCompat.getColor(themedContext, R.color.overlay_status_on)
                 else -> ContextCompat.getColor(themedContext, R.color.overlay_text_muted)
             },
