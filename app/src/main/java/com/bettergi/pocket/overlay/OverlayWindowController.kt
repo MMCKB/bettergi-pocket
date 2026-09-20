@@ -623,11 +623,11 @@ class OverlayWindowController(
     /** 追加一行已格式化的日志（供 AppLog sink 使用，不再补时间戳） */
     private fun appendLogLine(line: String) {
         mainHandler.post {
-            if (!logWindowVisible || logText == null) return@post
             if (logLines.size >= MAX_LOG_LINES) {
                 logLines.removeFirst()
             }
             logLines.addLast(line)
+            if (!logWindowVisible || logText == null) return@post
             logText?.text = logLines.joinToString("\n")
             val scroll = logScroll ?: return@post
             val child = scroll.getChildAt(0) ?: return@post
@@ -834,7 +834,13 @@ class OverlayWindowController(
         try {
             windowManager.addView(body, bodyParams)
             windowManager.addView(handle, handleParams)
-            handle.post { clampLogWindows() }
+            handle.post {
+                clampLogWindows()
+                if (logLines.isNotEmpty()) {
+                    logText?.text = logLines.joinToString("\n")
+                    logScroll?.post { logScroll?.fullScroll(View.FOCUS_DOWN) }
+                }
+            }
         } catch (_: Throwable) {
             hideLogWindow()
         }
@@ -856,7 +862,6 @@ class OverlayWindowController(
         logTitle = null
         logText = null
         logScroll = null
-        logLines.clear()
     }
 
     private fun overlayParams(
@@ -1219,7 +1224,7 @@ class OverlayWindowController(
         private const val IDLE_ALPHA = 0.62f
         private const val IDLE_DELAY_MS = 2400L
         private const val TALKING_HOLD_MS = 2000L
-        private const val MAX_LOG_LINES = 16
+        private const val MAX_LOG_LINES = 400
         private const val TAP_INDICATOR_SIZE_DP = 28
         private const val TAP_INDICATOR_MS = 450L
     }
