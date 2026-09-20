@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [ main, root ]
+    branches: [ main ]
     tags: [ 'v*' ]
     paths-ignore:
       - 'README.md'
