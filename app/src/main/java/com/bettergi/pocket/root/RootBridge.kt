@@ -38,6 +38,8 @@ object RootBridge {
     private var helperProcess: Process? = null
 
     private var appContext: Context? = null
+    @Volatile
+    private var keepAliveApplied = false
 
     fun attach(context: Context) {
         appContext = context.applicationContext
@@ -110,6 +112,7 @@ object RootBridge {
             if (pong == "pong") {
                 running = true
                 Log.i(TAG, "root backend connected")
+                applyKeepAlive()
                 return true
             }
             try {
@@ -198,6 +201,31 @@ object RootBridge {
             return w to h
         }
         return null
+    }
+
+    fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long) {
+        request("SWIPE $x1 $y1 $x2 $y2 $durationMs", 3000L)
+    }
+
+    fun longPress(x: Int, y: Int, durationMs: Long) {
+        request("LONG $x $y $durationMs", 3000L)
+    }
+
+    fun pidOf(packageName: String): Int? {
+        val resp = request("PID $packageName", 2000L) ?: return null
+        if (!resp.startsWith("OK ")) return null
+        val pid = resp.removePrefix("OK ").trim().toIntOrNull() ?: return null
+        return if (pid > 0) pid else null
+    }
+
+    /** 加入电池白名单 + 提升为 active 待机桶；每进程只应用一次 */
+    private fun applyKeepAlive() {
+        if (keepAliveApplied) return
+        val pkg = appContext?.packageName ?: return
+        if (request("KEEPALIVE $pkg", 3000L)?.startsWith("OK") == true) {
+            keepAliveApplied = true
+            Log.i(TAG, "keep-alive applied for $pkg")
+        }
     }
 
     @Synchronized

@@ -13,4 +13,7 @@ class RootStatusProbe(
 
     /** 屏幕物理尺寸（像素）；失败返回 null */
     fun screenSize(): Pair<Int, Int>? = bridge.screenSize()
+
+    /** 指定包名进程是否存活（用于判断目标/游戏是否在运行） */
+    fun isProcessRunning(packageName: String): Boolean = bridge.pidOf(packageName) != null
 }

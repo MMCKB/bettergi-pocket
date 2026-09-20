@@ -19,11 +19,14 @@
  *   SWIPE x1 y1 x2 y2 dur -> OK
  *   LONG x y dur        -> OK
  *   FG                  -> OK <前台包名>
+ *   PID <pkg>           -> OK <pid|0>
+ *   KEEPALIVE <pkg>     -> OK（电池白名单 + active 待机桶）
  *   QUIT                -> OK bye
  *
  * 构建：见同目录 build.sh（Debian/aarch64 静态 PIE，可在 Android 直接执行）
  */
 #define _GNU_SOURCE
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/input.h>
@@ -215,6 +218,15 @@ static void do_swipe(int x1, int y1, int x2, int y2, int dur_ms) {
     touch_up();
 }
 
+/* 包名合法性校验：只允许字母数字、点、下划线，防命令注入 */
+static int valid_pkg(const char *s) {
+    if (!s || !*s || strlen(s) >= 128) return 0;
+    for (const char *p = s; *p; p++) {
+        if (!isalnum((unsigned char)*p) && *p != '.' && *p != '_') return 0;
+    }
+    return 1;
+}
+
 /* 解析 dumpsys 里的前台 ActivityRecord，取包名；找不到置空 */
 static void query_foreground(char *out, size_t out_sz) {
     out[0] = '\0';
@@ -267,6 +279,40 @@ static int handle_line(const char *line, char *resp, size_t resp_sz) {
     if (sscanf(line, "SWIPE %d %d %d %d %d", &x1, &y1, &x2, &y2, &dur) == 5) {
         do_swipe(x1, y1, x2, y2, dur);
         snprintf(resp, resp_sz, "OK swipe\n");
+        return 0;
+    }
+    if (strncmp(line, "PID ", 4) == 0) {
+        char pkg[128];
+        if (sscanf(line, "PID %127s", pkg) == 1 && valid_pkg(pkg)) {
+            char cmd[256];
+            snprintf(cmd, sizeof(cmd), "pidof %s 2>/dev/null", pkg);
+            int pid = 0;
+            FILE *p = popen(cmd, "r");
+            if (p) {
+                char buf[64];
+                if (fgets(buf, sizeof(buf), p)) pid = atoi(buf);
+                pclose(p);
+            }
+            snprintf(resp, resp_sz, "OK %d\n", pid);
+        } else {
+            snprintf(resp, resp_sz, "ERR bad package\n");
+        }
+        return 0;
+    }
+    if (strncmp(line, "KEEPALIVE ", 10) == 0) {
+        char pkg[128];
+        if (sscanf(line, "KEEPALIVE %127s", pkg) == 1 && valid_pkg(pkg)) {
+            char cmd[320];
+            snprintf(cmd, sizeof(cmd), "dumpsys deviceidle whitelist +%s >/dev/null 2>&1", pkg);
+            FILE *p1 = popen(cmd, "r");
+            if (p1) pclose(p1);
+            snprintf(cmd, sizeof(cmd), "am set-standby-bucket %s active >/dev/null 2>&1", pkg);
+            FILE *p2 = popen(cmd, "r");
+            if (p2) pclose(p2);
+            snprintf(resp, resp_sz, "OK keepalive\n");
+        } else {
+            snprintf(resp, resp_sz, "ERR bad package\n");
+        }
         return 0;
     }
     if (strncmp(line, "BACK", 4) == 0) {
