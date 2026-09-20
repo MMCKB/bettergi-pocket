@@ -39,6 +39,8 @@ object RootBridge {
     private var appContext: Context? = null
     @Volatile
     private var keepAliveApplied = false
+    @Volatile
+    private var suPath: String? = null
 
     fun attach(context: Context) {
         appContext = context.applicationContext
@@ -87,7 +89,8 @@ object RootBridge {
         val sockPath = File(dir, "sock").absolutePath
         File(sockPath).delete()
 
-        val cmd = "su -c \"$helper --server --sock $sockPath --uid ${android.os.Process.myUid()}\""
+        val su = resolveSu()
+        val cmd = "$su -c \"$helper --server --sock $sockPath --uid ${android.os.Process.myUid()}\""
         val process = try {
             ProcessBuilder("sh", "-c", cmd).redirectErrorStream(false).start()
         } catch (e: Exception) {
@@ -125,6 +128,27 @@ object RootBridge {
         return false
     }
 
+    /** 解析可用的 su 绝对路径（多路径探测，不依赖 app 的 PATH） */
+    private fun resolveSu(): String {
+        suPath?.let { return it }
+        val ctx = appContext ?: return "su"
+        val candidates = listOf(
+            "/system/bin/su",
+            "/system/xbin/su",
+            "/sbin/su",
+            "/vendor/bin/su",
+            "/debug_ramdisk/su",
+        )
+        for (p in candidates) {
+            if (runCommand(ctx, "test -x $p && echo yes", 1500L)?.trim() == "yes") {
+                suPath = p
+                return p
+            }
+        }
+        val found = runCommand(ctx, "command -v su", 1500L)?.trim()
+        return if (!found.isNullOrEmpty()) found else "su"
+    }
+
     /** 每次启动都从 assets 覆盖释放，保证与当前安装包一致 */
     private fun releaseHelper(dest: File): Boolean {
         val ctx = appContext ?: return false
@@ -148,7 +172,8 @@ object RootBridge {
     private fun tryConnect(path: String): LocalSocket? {
         return try {
             val s = LocalSocket()
-            s.connect(LocalSocketAddress(path))
+            // 必须指定 FILESYSTEM：默认 ABSTRACT 命名空间会连到不存在的抽象 socket
+            s.connect(LocalSocketAddress(path, LocalSocketAddress.Namespace.FILESYSTEM))
             s
         } catch (e: Exception) {
             null

@@ -82,6 +82,7 @@ class OverlayWindowController(
     private var rootView: View? = null
     private var bubbleView: View? = null
     private var panelView: View? = null
+    private var panelScroll: ScrollView? = null
     private var statusDot: View? = null
     private var statusText: TextView? = null
     private var chatBadge: View? = null
@@ -184,6 +185,7 @@ class OverlayWindowController(
 
         bubbleView = bubble
         panelView = panel
+        panelScroll = root.findViewById(R.id.overlay_panel_scroll)
         statusDot = root.findViewById(R.id.overlay_status_dot)
         statusText = root.findViewById<TextView>(R.id.overlay_status_text).also { text ->
             text.setOnClickListener {
@@ -308,6 +310,7 @@ class OverlayWindowController(
             rememberScreen()
             clampToScreen(layoutParams)
             if (!expanded) snapToEdgeIfEnabled(layoutParams, animate = false)
+            clampPanelHeight()
             scheduleIdleFade()
         }
     }
@@ -389,6 +392,7 @@ class OverlayWindowController(
         rootView = null
         bubbleView = null
         panelView = null
+        panelScroll = null
         statusDot = null
         statusText = null
         chatBadge = null
@@ -487,6 +491,7 @@ class OverlayWindowController(
             root.post {
                 params?.let { ensurePanelOnScreen(it) }
                 applyPanelPivot(panel)
+                clampPanelHeight()
                 bubble.animate()
                     .alpha(0f)
                     .scaleX(0.72f)
@@ -685,6 +690,20 @@ class OverlayWindowController(
         tapIndicatorParams = null
     }
 
+    /** 面板内容超过屏幕 72% 时限制滚动高度，保证小屏机器也能看全菜单 */
+    private fun clampPanelHeight() {
+        val scroll = panelScroll ?: return
+        val maxHeight = (screenSize().second * 0.72f).toInt()
+        rootView?.post {
+            val content = scroll.getChildAt(0) ?: return@post
+            val target =
+                if (content.height > maxHeight) maxHeight else WindowManager.LayoutParams.WRAP_CONTENT
+            if (scroll.layoutParams.height != target) {
+                scroll.layoutParams = scroll.layoutParams.apply { height = target }
+            }
+        }
+    }
+
     private fun setLogWindowVisible(visible: Boolean, persist: Boolean = true) {
         if (persist) {
             prefs.edit().putBoolean(KEY_LOG_VISIBLE, visible).apply()
@@ -715,6 +734,7 @@ class OverlayWindowController(
         }
         autoSkipExtras?.visibility = if (expanded) View.VISIBLE else View.GONE
         autoSkipChevron?.animate()?.rotation(if (expanded) 90f else 0f)?.setDuration(160)?.start()
+        clampPanelHeight()
     }
 
     private fun setLaunchMenuExpanded(expanded: Boolean, persist: Boolean = true) {
@@ -724,6 +744,7 @@ class OverlayWindowController(
         }
         launchExtras?.visibility = if (expanded) View.VISIBLE else View.GONE
         launchChevron?.animate()?.rotation(if (expanded) 90f else 0f)?.setDuration(160)?.start()
+        clampPanelHeight()
     }
 
     private fun isTalking(): Boolean = System.currentTimeMillis() < talkingUntilMs
