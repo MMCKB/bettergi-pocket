@@ -3,11 +3,8 @@ package com.bettergi.pocket.overlay
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
-import android.content.BroadcastReceiver
 import android.content.ComponentCallbacks
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.PixelFormat
