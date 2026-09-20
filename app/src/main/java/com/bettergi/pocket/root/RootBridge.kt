@@ -1,0 +1,241 @@
+package com.bettergi.pocket.root
+
+import android.content.Context
+import android.net.LocalSocket
+import android.net.LocalSocketAddress
+import android.os.Process
+import android.util.Log
+import java.io.BufferedReader
+import java.io.File
+import java.io.InputStreamReader
+import java.io.OutputStream
+import java.util.concurrent.TimeUnit
+
+/**
+ * root 注入桥：探测 su、释放并启动 bgroot helper、经 LocalSocket 通信。
+ *
+ * 设计要点：
+ * - 不绑定任何 root 方案（Magisk / KernelSU / APatch / 原生 su 均走通用 su 探测）
+ * - 不做授权引导，失败由上层如实报告状态
+ * - helper 与 app 同生命周期：stop() 时发 QUIT 并销毁进程
+ */
+object RootBridge {
+
+    private const val TAG = "BetterGI.Root"
+    private const val HELPER_ASSET = "root/arm64-v8a/bgroot"
+    private const val CONNECT_TIMEOUT_MS = 4000L
+    private const val PING_TIMEOUT_MS = 3000L
+
+    @Volatile
+    private var running = false
+    @Volatile
+    private var socket: LocalSocket? = null
+    @Volatile
+    private var output: OutputStream? = null
+    @Volatile
+    private var reader: BufferedReader? = null
+    @Volatile
+    private var helperProcess: Process? = null
+
+    private var appContext: Context? = null
+
+    fun attach(context: Context) {
+        appContext = context.applicationContext
+    }
+
+    fun isRunning(): Boolean = running
+
+    /** 探测 su 是否真正可用（多路径 + 多种调用变体，输出必须含 uid=0） */
+    fun isSuAvailable(): Boolean {
+        val ctx = appContext ?: return false
+        val suPaths = listOf(
+            "/system/bin/su",
+            "/system/xbin/su",
+            "/sbin/su",
+            "/vendor/bin/su",
+        )
+        var found = suPaths.any { runCommand(ctx, "test -x $it && echo yes", 1500L)?.trim() == "yes" }
+        if (!found) {
+            found = runCommand(ctx, "command -v su", 1500L)?.trim()?.isNotEmpty() == true
+        }
+        if (!found) return false
+        val variants = listOf(
+            "su -c id",
+            "su 0 id",
+            "su -c 'id'",
+        )
+        for (v in variants) {
+            val out = runCommand(ctx, v, 2500L) ?: continue
+            if (out.contains("uid=0")) return true
+        }
+        return false
+    }
+
+    /** 启动 helper 并完成握手；成功返回 true */
+    @Synchronized
+    fun start(): Boolean {
+        val ctx = appContext ?: return false
+        stop()
+
+        val dir = File(ctx.filesDir, "root")
+        dir.mkdirs()
+        val helper = File(dir, "bgroot")
+        if (!releaseHelper(helper)) return false
+        helper.setExecutable(true, false)
+
+        val sockPath = File(dir, "sock").absolutePath
+        File(sockPath).delete()
+
+        val cmd = "su -c \"$helper --server --sock $sockPath --uid ${Process.myUid()}\""
+        val process = try {
+            ProcessBuilder("sh", "-c", cmd).redirectErrorStream(false).start()
+        } catch (e: Exception) {
+            Log.e(TAG, "start helper failed", e)
+            return false
+        }
+        helperProcess = process
+
+        val deadline = System.currentTimeMillis() + CONNECT_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            Thread.sleep(60)
+            if (!process.isAlive) {
+                Log.e(TAG, "helper exited early, code=${process.exitValue()}")
+                return false
+            }
+            val s = tryConnect(sockPath) ?: continue
+            socket = s
+            output = s.outputStream
+            reader = BufferedReader(InputStreamReader(s.inputStream), 1024)
+            val pong = request("PING", PING_TIMEOUT_MS)
+            if (pong == "pong") {
+                running = true
+                Log.i(TAG, "root backend connected")
+                return true
+            }
+            try {
+                s.close()
+            } catch (_: Exception) {
+            }
+            return false
+        }
+        Log.e(TAG, "connect to helper timed out")
+        return false
+    }
+
+    /** 每次启动都从 assets 覆盖释放，保证与当前安装包一致 */
+    private fun releaseHelper(dest: File): Boolean {
+        val ctx = appContext ?: return false
+        val source = try {
+            ctx.assets.open(HELPER_ASSET)
+        } catch (e: Exception) {
+            Log.e(TAG, "asset missing: $HELPER_ASSET", e)
+            return false
+        }
+        return try {
+            source.use { input ->
+                dest.outputStream().use { out -> input.copyTo(out) }
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "release helper failed", e)
+            false
+        }
+    }
+
+    private fun tryConnect(path: String): LocalSocket? {
+        return try {
+            val s = LocalSocket()
+            s.connect(LocalSocketAddress(path))
+            s
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** 发送一行指令并读取一行回复；失败返回 null 并标记断线 */
+    @Synchronized
+    fun request(cmd: String, timeoutMs: Long = 3000L): String? {
+        val out = output ?: return null
+        val rd = reader ?: return null
+        return try {
+            out.write((cmd + "\n").toByteArray(Charsets.UTF_8))
+            out.flush()
+            val line = rd.readLine() ?: run {
+                running = false
+                null
+            }
+            line
+        } catch (e: Exception) {
+            Log.w(TAG, "request failed: $cmd -> ${e.message}")
+            running = false
+            null
+        }
+    }
+
+    fun tap(x: Int, y: Int, durationMs: Long) {
+        request("TAP $x $y $durationMs", 2000L)
+    }
+
+    fun back() {
+        request("BACK", 2000L)
+    }
+
+    fun foreground(): String? {
+        val resp = request("FG", 3000L) ?: return null
+        if (resp.startsWith("OK ")) {
+            val fg = resp.removePrefix("OK ").trim()
+            return if (fg == "unknown") null else fg
+        }
+        return null
+    }
+
+    fun screenSize(): Pair<Int, Int>? {
+        val resp = request("PROBE", 2000L) ?: return null
+        if (resp.startsWith("OK ")) {
+            val parts = resp.removePrefix("OK ").split(" ")
+            val w = parts.getOrNull(0)?.toIntOrNull() ?: return null
+            val h = parts.getOrNull(1)?.toIntOrNull() ?: return null
+            return w to h
+        }
+        return null
+    }
+
+    @Synchronized
+    fun stop() {
+        running = false
+        try {
+            output?.write("QUIT\n".toByteArray(Charsets.UTF_8))
+            output?.flush()
+        } catch (_: Exception) {
+        }
+        try {
+            socket?.close()
+        } catch (_: Exception) {
+        }
+        try {
+            helperProcess?.destroy()
+        } catch (_: Exception) {
+        }
+        socket = null
+        output = null
+        reader = null
+        helperProcess = null
+    }
+
+    private fun runCommand(ctx: Context, command: String, timeoutMs: Long): String? {
+        val proc = try {
+            ProcessBuilder("sh", "-c", command).redirectErrorStream(true).start()
+        } catch (e: Exception) {
+            return null
+        }
+        return try {
+            val out = proc.inputStream.bufferedReader().readText()
+            if (!proc.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
+                proc.destroy()
+            }
+            out
+        } catch (e: Exception) {
+            null
+        }
+    }
+}
