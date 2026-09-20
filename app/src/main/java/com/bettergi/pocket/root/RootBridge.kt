@@ -104,13 +104,14 @@ object RootBridge {
         drainHelperOutput(process, "helper")
 
         val deadline = System.currentTimeMillis() + CONNECT_TIMEOUT_MS
+        var firstFail = true
         while (System.currentTimeMillis() < deadline) {
             Thread.sleep(60)
             if (!process.isAlive) {
                 AppLog.e(TAG, "helper exited early, code=${process.exitValue()}")
                 return false
             }
-            val s = tryConnect(sockPath) ?: continue
+            val s = tryConnect(sockPath, logFailure = firstFail).also { if (it == null) firstFail = false } ?: continue
             socket = s
             output = s.outputStream
             reader = BufferedReader(InputStreamReader(s.inputStream), 1024)
@@ -180,13 +181,13 @@ object RootBridge {
         }
     }
 
-    private fun tryConnect(path: String): LocalSocket? {
+    private fun tryConnect(path: String, logFailure: Boolean = false): LocalSocket? {
         return try {
             val s = LocalSocket()
-            // 必须指定 FILESYSTEM：默认 ABSTRACT 命名空间会连到不存在的抽象 socket
             s.connect(LocalSocketAddress(path, LocalSocketAddress.Namespace.FILESYSTEM))
             s
         } catch (e: Exception) {
+            if (logFailure) AppLog.w(TAG, "connect $path failed: ${e.message}")
             null
         }
     }

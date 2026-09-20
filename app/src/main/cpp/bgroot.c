@@ -11,6 +11,7 @@
  *   --tap X Y [--dur MS]               单次点击后退出
  *   --swipe X1 Y1 X2 Y2 [--dur MS]     滑动后退出
  *   --server --sock PATH [--uid UID] [--app-pid PID]
+ *          socket 文件 chown 给 --uid，仅该 app 可连
  *          常驻；仅接受 --uid 进程连接，app 消失自动退出
  *
  * 协议（行文本，回复 OK / ERR <原因>）：
@@ -358,6 +359,11 @@ static int run_server(const char *sock_path, int allow_uid) {
         return 2;
     }
     chmod(sock_path, 0600);
+    /* 把 socket 文件所有权让渡给本 app：Unix socket connect 需要文件写权限，
+       否则 app（非 root）对 root:0600 的文件无法连接（EACCES） */
+    if (allow_uid > 0) {
+        chown(sock_path, allow_uid, allow_uid);
+    }
     if (listen(sfd, 4) < 0) {
         fprintf(stderr, "ERR listen: %s\n", strerror(errno));
         close(sfd);
