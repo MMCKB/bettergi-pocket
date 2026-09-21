@@ -57,7 +57,7 @@ jobs:
         run: |
           git config user.name "ci-bot"
           git config user.email "ci-bot@users.noreply.github.com"
-          git add app/src/main/jniLibs/arm64-v8a/libopencv_java4.so
+          git add app/src/main/jniLibs/arm64-v8a/
           if git diff --cached --quiet; then
             echo "no change, skip commit"
           else
