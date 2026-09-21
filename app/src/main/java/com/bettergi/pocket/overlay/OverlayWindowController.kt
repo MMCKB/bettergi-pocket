@@ -779,6 +779,9 @@ class OverlayWindowController(
             prefs.edit().putBoolean(KEY_AUTO_SKIP_EXPANDED, expanded).apply()
         }
         autoSkipExtras?.visibility = if (expanded) View.VISIBLE else View.GONE
+        if (!expanded) {
+            panelScroll?.post { panelScroll?.scrollTo(0, 0) }
+        }
         autoSkipChevron?.animate()?.rotation(if (expanded) 90f else 0f)?.setDuration(160)?.start()
         clampPanelHeight()
     }
@@ -789,6 +792,9 @@ class OverlayWindowController(
             prefs.edit().putBoolean(KEY_LAUNCH_EXPANDED, expanded).apply()
         }
         launchExtras?.visibility = if (expanded) View.VISIBLE else View.GONE
+        if (!expanded) {
+            panelScroll?.post { panelScroll?.scrollTo(0, 0) }
+        }
         launchChevron?.animate()?.rotation(if (expanded) 90f else 0f)?.setDuration(160)?.start()
         clampPanelHeight()
     }
