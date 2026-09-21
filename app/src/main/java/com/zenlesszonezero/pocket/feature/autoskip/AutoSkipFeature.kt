@@ -118,47 +118,44 @@ class AutoSkipFeature(
             return
         }
 
-        // 2) 快速跳过：检测到「跳过」按钮时点击；连续无效则长按触发弹窗
-        if (settings.quickSkipDialogueEnabled) {
-            val skip = findSkipButton(content, cw, ch)
-            if (skip != null) {
-                val now = System.currentTimeMillis()
-                if (now - lastSkipClickMs >= SKIP_CLICK_INTERVAL_MS) {
-                    val longPress = skipStreak >= LONG_PRESS_AFTER
-                    val (sx, sy) = skip
-                    val action = if (longPress) ClickAction(sx, sy, LONG_PRESS_MS)
-                    else ClickAction(sx, sy, TAP_MS)
-                    Log.i(TAG, "click skip longPress=$longPress at $sx,$sy")
-                    events?.onAutoSkipLog("点击跳过${if (longPress) "（长按）" else ""} ($sx, $sy)")
-                    actions.emit(action)
-                    lastSkipClickMs = now
-                    skipStreak++
-                }
+        val now = System.currentTimeMillis()
+        if (now < clickedAtMs + CONFIRM_WINDOW_MS && clickedOptionY >= 0) return
+
+        // 2) 选项优先：识别到选项即点击（自动对话主功能）
+        if (now - lastOptionDecisionAtMs >= OPTION_DECISION_INTERVAL_MS) {
+            lastOptionDecisionAtMs = now
+            val decision = decideOption(content, cw, ch)
+            if (decision != null) {
+                val (tx, ty) = decision.centerOnNativeCapture()
+                events?.onChatIconsRecognized(1, tx, ty)
+                Log.i(TAG, "click option at $tx,$ty")
+                events?.onAutoSkipLog("点击选项 ($tx, $ty)")
+                events?.onChatIconClicked(tx, ty)
+                actions.emit(ClickAction(tx, ty))
+                clickedOptionY = decision.y
+                clickedAtMs = now
+                state = State.CONFIRMING
                 return
             }
         }
 
-        // 3) 选项 / 继续
-        val now = System.currentTimeMillis()
-        if (now < clickedAtMs + CONFIRM_WINDOW_MS && clickedOptionY >= 0) return
-        if (now - lastOptionDecisionAtMs < OPTION_DECISION_INTERVAL_MS) {
-            maybeContinue(tick, actions)
-            return
+        // 3) 无选项：快速跳过（若开启；连续短按无效则长按触发弹窗），否则点继续推进
+        if (settings.quickSkipDialogueEnabled) {
+            val skip = findSkipButton(content, cw, ch)
+            if (skip != null && now - lastSkipClickMs >= SKIP_CLICK_INTERVAL_MS) {
+                val longPress = skipStreak >= LONG_PRESS_AFTER
+                val (sx, sy) = skip
+                val action = if (longPress) ClickAction(sx, sy, LONG_PRESS_MS)
+                else ClickAction(sx, sy, TAP_MS)
+                Log.i(TAG, "click skip longPress=$longPress at $sx,$sy")
+                events?.onAutoSkipLog("点击跳过${if (longPress) "（长按）" else ""} ($sx, $sy)")
+                actions.emit(action)
+                lastSkipClickMs = now
+                skipStreak++
+                return
+            }
         }
-        lastOptionDecisionAtMs = now
-        val decision = decideOption(content, cw, ch)
-        if (decision == null) {
-            maybeContinue(tick, actions)
-            return
-        }
-        val (tx, ty) = decision.centerOnNativeCapture()
-        events?.onChatIconsRecognized(1, tx, ty)
-        Log.i(TAG, "click option at $tx,$ty")
-        events?.onAutoSkipLog("点击选项 ($tx, $ty)")
-        events?.onChatIconClicked(tx, ty)
-        clickedOptionY = decision.y
-        clickedAtMs = now
-        state = State.CONFIRMING
+        maybeContinue(tick, actions)
     }
 
     private fun onConfirming(

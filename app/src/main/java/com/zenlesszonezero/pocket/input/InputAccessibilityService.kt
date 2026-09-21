@@ -113,6 +113,9 @@ class InputAccessibilityService : AccessibilityService() {
             return remoteStatus()?.getBoolean(KEY_CONNECTED, false) == true
         }
 
+        /** 应用上下文（由 [attach] 注入），供跨进程/UI 提示使用，可能为 null。 */
+        fun appContextOrNull(): Context? = appContext
+
         /** `true`/`false` 表示原神是否在前台；无障碍未连接或尚未观察到窗口时为 `null`。 */
         fun isGenshinInForeground(): Boolean? {
             val (connected, pkg) = currentStatus()
