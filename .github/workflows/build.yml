@@ -45,7 +45,7 @@ jobs:
 
       - name: Build opencv_java4
         working-directory: /tmp/opencv-4.9.0/build
-        run: make -j4 opencv_java4
+        run: make -j4
 
       - name: Copy slim .so into repo
         run: |
