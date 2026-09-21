@@ -30,12 +30,28 @@ class RootAutomationController(
     override fun execute(action: AutomationAction) {
         when (action) {
             is ClickAction -> {
+                if (bridge.uinputReady() == false) {
+                    // input 命令模式：直接用屏幕坐标（无需反旋转）
+                    if (!bridge.inputTap(action.x, action.y)) {
+                        AppLog.w(TAG, "input tap failed at ${action.x},${action.y}")
+                    }
+                    return
+                }
+                // uinput 模式：先反旋转到设备自然坐标再注入
                 val (dx, dy) = toDeviceCoordinates(action.x, action.y)
                 if (!bridge.tap(dx, dy, action.durationMs)) {
-                    AppLog.w(TAG, "click injection failed at ${action.x},${action.y} -> $dx,$dy")
+                    AppLog.w(TAG, "uinput tap failed at ${action.x},${action.y} -> $dx,$dy, fallback input-cmd")
+                    bridge.downgradeToInputMode()
+                    bridge.inputTap(action.x, action.y)
                 }
             }
-            BackAction -> bridge.back()
+            BackAction -> {
+                if (bridge.uinputReady() == false) {
+                    bridge.inputBack()
+                } else {
+                    bridge.back()
+                }
+            }
         }
     }
 

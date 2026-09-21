@@ -266,7 +266,14 @@ static int handle_line(const char *line, char *resp, size_t resp_sz) {
         return 0;
     }
     if (strncmp(line, "PROBE", 5) == 0) {
-        snprintf(resp, resp_sz, "OK %d %d uinput\n", scr_w, scr_h);
+        snprintf(resp, resp_sz, "OK %d %d %s\n", scr_w, scr_h,
+                 (ufd >= 0) ? "uinput_ok" : "uinput_fail");
+        return 0;
+    }
+    if (ufd < 0 && (strncmp(line, "TAP", 3) == 0 ||
+                     strncmp(line, "LONG", 4) == 0 ||
+                     strncmp(line, "SWIPE", 5) == 0)) {
+        snprintf(resp, resp_sz, "ERR uinput\n");
         return 0;
     }
     if (sscanf(line, "TAP %d %d %d", &x, &y, &dur) == 3) {
@@ -475,11 +482,15 @@ int main(int argc, char **argv) {
 
     ufd = create_uinput();
     if (ufd < 0) {
-        fprintf(stderr, "ERR uinput unavailable\n");
-        return 3;
+        fprintf(stderr, "WARN uinput unavailable: %s\n", strerror(errno));
+        fflush(stderr);
+        if (!has_flag(argc, argv, "--server")) {
+            return 3;
+        }
+    } else {
+        fprintf(stderr, "OK uinput created BetterGI Virtual Touch (%dx%d)\n", scr_w, scr_h);
+        fflush(stderr);
     }
-    fprintf(stderr, "OK uinput created BetterGI Virtual Touch (%dx%d)\n", scr_w, scr_h);
-    fflush(stderr);
 
     if (has_flag(argc, argv, "--probe")) {
         int hold = arg_value(argc, argv, "--hold", 8);

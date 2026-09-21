@@ -41,12 +41,25 @@ object RootBridge {
     private var keepAliveApplied = false
     @Volatile
     private var suPath: String? = null
+    @Volatile
+    private var uinputAvailable: Boolean? = null
 
     fun attach(context: Context) {
         appContext = context.applicationContext
     }
 
     fun isRunning(): Boolean = running
+
+    /** uinput 注入是否可用；null = 尚未探测到。 */
+    fun uinputReady(): Boolean? = uinputAvailable
+
+    /** uinput 注入中途失效时降级到 input 命令模式（只允许 true -> false）。 */
+    fun downgradeToInputMode() {
+        if (uinputAvailable == true) {
+            uinputAvailable = false
+            AppLog.w(TAG, "uinput tap failed, downgraded to input-cmd mode")
+        }
+    }
 
     /** 启动 helper 并完成握手；成功返回 true */
     @Synchronized
@@ -93,6 +106,7 @@ object RootBridge {
             if (pong == "OK pong" || pong == "pong") {
                 running = true
                 AppLog.i(TAG, "root backend connected")
+                detectUinputMode()
                 applyKeepAlive()
                 return true
             }
@@ -225,6 +239,46 @@ object RootBridge {
             return w to h
         }
         return null
+    }
+
+    /** 探测 uinput 可用性并记录注入模式（uinput / input-cmd 兜底）。 */
+    private fun detectUinputMode() {
+        val probe = request("PROBE", 2000L)
+        uinputAvailable = if (probe != null && probe.startsWith("OK ")) {
+            probe.removePrefix("OK ").split(" ").getOrNull(2) == "uinput_ok"
+        } else {
+            null
+        }
+        AppLog.i(
+            TAG,
+            "injection mode: " + when (uinputAvailable) {
+                true -> "uinput (fast)"
+                false -> "input-cmd (uinput unavailable, fallback)"
+                null -> "unknown (PROBE failed)"
+            },
+        )
+    }
+
+    /** input 命令模式点击（屏幕坐标，经 su 执行系统命令注入，全 root 方案兼容）。 */
+    fun inputTap(x: Int, y: Int): Boolean {
+        val ctx = appContext ?: return false
+        val cmd = "${resolveSu()} -c \"input tap $x $y\""
+        if (runCommand(ctx, cmd, 2500L) == null) {
+            AppLog.w(TAG, "input tap $x,$y failed")
+            return false
+        }
+        return true
+    }
+
+    /** input 命令模式返回键。 */
+    fun inputBack(): Boolean {
+        val ctx = appContext ?: return false
+        val cmd = "${resolveSu()} -c \"input keyevent 4\""
+        if (runCommand(ctx, cmd, 2500L) == null) {
+            AppLog.w(TAG, "input back failed")
+            return false
+        }
+        return true
     }
 
     /** 加入电池白名单 + 提升为 active 待机桶；每进程只应用一次 */
