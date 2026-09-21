@@ -24,22 +24,11 @@ android {
         abi {
             isEnable = true
             reset()
-            include("armeabi-v7a", "arm64-v8a", "x86_64")
+            include("arm64-v8a")
             isUniversalApk = false
         }
     }
 
-    packaging {
-        jniLibs {
-            // arm64 用仓库内裁剪版 OpenCV（core+imgproc+imgcodecs），排除 maven 全量 so
-            excludes += setOf(
-                "lib/arm64-v8a/libopencv_core.so",
-                "lib/arm64-v8a/libopencv_imgproc.so",
-                "lib/arm64-v8a/libopencv_imgcodecs.so",
-                "lib/arm64-v8a/libopencv_java4.so",
-            )
-        }
-    }
 
     sourceSets {
         getByName("main") {
@@ -93,7 +82,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
-    implementation(libs.opencv)
+    implementation(files("libs/opencv-490-custom.jar"))
     implementation(libs.mlkit.text.recognition.chinese)
     testImplementation(libs.junit)
     val desktopOpenCv = file("libs/opencv-4.9.0-0.jar")
