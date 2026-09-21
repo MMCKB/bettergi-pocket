@@ -47,10 +47,14 @@ jobs:
         working-directory: /tmp/opencv-4.9.0/build
         run: make -j4 opencv_java
 
-      - name: Copy slim .so into repo
+      - name: Strip & copy slim .so into repo
         run: |
+          STRIP="$ANDROID_HOME/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
           mkdir -p app/src/main/jniLibs/arm64-v8a
-          find /tmp/opencv-4.9.0/build -name 'libopencv_*.so' -exec cp {} app/src/main/jniLibs/arm64-v8a/ \;
+          for f in $(find /tmp/opencv-4.9.0/build -name 'libopencv_*.so'); do
+            "$STRIP" "$f"
+            cp "$f" app/src/main/jniLibs/arm64-v8a/
+          done
           ls -la app/src/main/jniLibs/arm64-v8a/
 
       - name: Commit slim OpenCV
