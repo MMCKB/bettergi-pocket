@@ -492,6 +492,7 @@ class OverlayWindowController(
         val panel = panelView ?: return
         val root = rootView ?: return
         expanded = value
+        panelExpanded = value
         transforming = true
         bubble.animate().cancel()
         panel.animate().cancel()
@@ -1220,7 +1221,11 @@ class OverlayWindowController(
         return (value * context.resources.displayMetrics.density).toInt()
     }
 
-    private companion object {
+    companion object {
+        /** 悬浮球面板是否展开：展开时自动点击暂停，避免把面板文字当作选项点击。 */
+        @Volatile
+        var panelExpanded: Boolean = false
+
         private const val PREFS_NAME = "overlay_window"
         private const val KEY_X = "x"
         private const val KEY_Y = "y"

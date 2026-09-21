@@ -3,6 +3,7 @@ package com.zenlesszonezero.pocket.feature.autoskip
 import android.util.Log
 import com.zenlesszonezero.pocket.input.ActionEmitter
 import com.zenlesszonezero.pocket.input.ClickAction
+import com.zenlesszonezero.pocket.overlay.OverlayWindowController
 import com.zenlesszonezero.pocket.recognition.CaptureContent
 import com.zenlesszonezero.pocket.recognition.IntRect
 import com.zenlesszonezero.pocket.recognition.RecognitionAssets
@@ -19,16 +20,12 @@ import org.opencv.core.Scalar
 /**
  * 绝区零自动对话（基于 BetterGI Pocket 框架改造）。
  *
- * 识别层为「1080p 归一化比例区域 + ML Kit 中文 OCR」，不依赖模板图片。
- * **识别区域按横/竖屏自适应**（见 [zones]）：绝区零在手机为竖屏、平板/PC/模拟器为横屏，
- * 两者按钮与选项位置差别很大（横屏选项在屏幕正中央）。
+ * 设计原则：**保守识别、选项优先、避免误点**。
+ * - 识别区域按横/竖屏自适应（[zones]）且刻意收窄，只覆盖按钮/选项/对话框的可能位置。
+ * - **悬浮窗面板展开时整体暂停**（[OverlayWindowController.panelExpanded]），避免把面板文字当选项点击。
+ * - 「菜单」只作为**跳过**手段，不参与对话判定，避免 HUD 误判。
  *
- * 行为：
- * 1. 对话判定：右上角功能按钮（跳过/自动/回顾/菜单）命中，**或选项区域有文字**，或底部对话气泡有文字。
- * 2. 快速跳过（若开启，优先）：有「跳过」按钮则点击（连续短按无效转长按）；**无「跳过」但只有「菜单」时长按「菜单」跳过**。
- * 3. 选项：OCR 选项文字 → 关键词决策（select > pause > defaultPause）→ 点最下方。
- * 4. 继续：对话中无选项时点击对话框推进。
- * 5. 弹窗确认：检测到中央「确定」即点击（覆盖长按跳过确认弹窗）。
+ * 行为优先级：弹窗「确定」 > 选项点击 > 无选项时（快速跳过 / 继续）。
  */
 class AutoSkipFeature(
     @Suppress("UNUSED_PARAMETER") private val assets: RecognitionAssets? = null,
@@ -57,6 +54,8 @@ class AutoSkipFeature(
         settings.screenShareEnabled && settings.autoSkipEnabled
 
     override fun onTick(tick: FeatureTick, settings: TriggerSettings, actions: ActionEmitter) {
+        // 悬浮窗面板展开时暂停识别与点击：面板文字不能被当作选项点击
+        if (OverlayWindowController.panelExpanded) return
         val content = tick.content ?: return
         val cw = content.captureRectArea.width
         val ch = content.captureRectArea.height
@@ -99,13 +98,13 @@ class AutoSkipFeature(
         settings: TriggerSettings,
         actions: ActionEmitter,
     ) {
-        val z = zones(cw, ch)
         if (!isDialogueScene(content)) {
             state = State.IDLE
             skipStreak = 0
             return
         }
         events?.onDialogueMatched()
+        val z = zones(cw, ch)
 
         // 1) 弹窗确认优先
         val ok = findConfirm(content, cw, ch)
@@ -119,31 +118,7 @@ class AutoSkipFeature(
         val now = System.currentTimeMillis()
         if (now < clickedAtMs + CONFIRM_WINDOW_MS && clickedOptionY >= 0) return
 
-        // 2) 快速跳过（若开启，优先于选项）
-        if (settings.quickSkipDialogueEnabled) {
-            val skip = findButton(content, z, "跳过")
-            if (skip != null) {
-                if (now - lastSkipClickMs >= SKIP_CLICK_INTERVAL_MS) {
-                    val longPress = skipStreak >= LONG_PRESS_AFTER
-                    emitSkip(skip, longPress, actions)
-                    lastSkipClickMs = now
-                    skipStreak++
-                }
-                return
-            }
-            // 无「跳过」按钮时：长按「菜单」跳过（绝区零部分对话仅提供菜单）
-            val menu = findButton(content, z, "菜单")
-            if (menu != null) {
-                if (now - lastSkipClickMs >= SKIP_CLICK_INTERVAL_MS) {
-                    emitSkip(menu, longPress = true, actions)
-                    lastSkipClickMs = now
-                    skipStreak++
-                }
-                return
-            }
-        }
-
-        // 3) 选项优先：识别到选项即点击
+        // 2) 选项优先：识别到选项即点击（自动对话主功能）
         if (now - lastOptionDecisionAtMs >= OPTION_DECISION_INTERVAL_MS) {
             lastOptionDecisionAtMs = now
             val decision = decideOption(content, cw, ch)
@@ -161,7 +136,27 @@ class AutoSkipFeature(
             }
         }
 
-        // 4) 无选项：点继续推进
+        // 3) 无选项：快速跳过（跳过按钮，或只有菜单时长按菜单），否则点继续
+        if (settings.quickSkipDialogueEnabled) {
+            val skip = findButton(content, z, "跳过")
+            if (skip != null) {
+                if (now - lastSkipClickMs >= SKIP_CLICK_INTERVAL_MS) {
+                    emitSkip(skip, skipStreak >= LONG_PRESS_AFTER, actions)
+                    lastSkipClickMs = now
+                    skipStreak++
+                }
+                return
+            }
+            val menu = findButton(content, z, "菜单")
+            if (menu != null) {
+                if (now - lastSkipClickMs >= SKIP_CLICK_INTERVAL_MS) {
+                    emitSkip(menu, longPress = true, actions)
+                    lastSkipClickMs = now
+                    skipStreak++
+                }
+                return
+            }
+        }
         maybeContinue(tick, cw, ch, actions)
     }
 
@@ -218,8 +213,10 @@ class AutoSkipFeature(
     // ---------------- 识别 ----------------
 
     /**
-     * 对话判定（350ms 节流缓存）：右上功能按钮命中 **或** 选项区域有文字 **或** 底部对话框有文字。
-     * 「选项区域有文字」是关键——部分对话界面（如中央双选项）没有底部气泡、也没有跳过/自动/回顾按钮。
+     * 对话判定（350ms 节流）：右上角「跳过/自动/回顾」按钮命中，**或**底部对话框有文字，
+     * **或** 选项区域存在有效选项。
+     *
+     * 注意：「菜单」不参与判定（过于常见，易把非对话界面/HUD 判成对话）。
      */
     private fun isDialogueScene(content: CaptureContent): Boolean {
         val now = System.currentTimeMillis()
@@ -236,31 +233,32 @@ class AutoSkipFeature(
             return true
         }
 
-        val opt = ocr(content, z.option.x(cw), z.option.y(ch), z.option.w(cw), z.option.h(ch))
-        if (opt.any { isValidOption(it.text) }) {
+        val bottom = ocr(content, z.bottom.x(cw), z.bottom.y(ch), z.bottom.w(cw), z.bottom.h(ch))
+        if (bottom.any { !it.text.isNullOrBlank() }) {
             lastDialogueResult = true
             return true
         }
 
-        val bottom = ocr(content, z.bottom.x(cw), z.bottom.y(ch), z.bottom.w(cw), z.bottom.h(ch))
-        val result = bottom.any { !it.text.isNullOrBlank() }
+        val opt = ocr(content, z.option.x(cw), z.option.y(ch), z.option.w(cw), z.option.h(ch))
+        val result = opt.count { isValidOption(it.text) } >= 1
         lastDialogueResult = result
         return result
     }
 
+    /** 仅「跳过/自动/回顾」视为对话功能按钮；不含「菜单」。 */
     private fun hasDialogueButton(text: String?): Boolean {
         if (text.isNullOrBlank()) return false
-        return text.contains("跳过") || text.contains("自动") ||
-            text.contains("回顾") || text.contains("菜单")
+        return text.contains("跳过") || text.contains("自动") || text.contains("回顾")
     }
 
-    /** 有效选项文字：非空、长度 >= 2、且含中文（过滤背景噪声/英文碎片）。 */
+    /** 有效选项文字：非空、含中文、长度 2..30（过滤背景噪声与长句 HUD）。 */
     private fun isValidOption(text: String?): Boolean {
-        if (text.isNullOrBlank() || text.length < 2) return false
-        return text.any { it in '\u4e00'..'\u9fff' }
+        if (text.isNullOrBlank()) return false
+        val t = text.trim()
+        if (t.length < 2 || t.length > 30) return false
+        return t.any { it in '\u4e00'..'\u9fff' }
     }
 
-    /** 在右上功能按钮区寻找包含 [keyword] 的按钮，返回屏幕原生中心坐标。 */
     private fun findButton(content: CaptureContent, z: Zones, keyword: String): Pair<Int, Int>? {
         val cw = content.captureRectArea.width
         val ch = content.captureRectArea.height
@@ -279,10 +277,6 @@ class AutoSkipFeature(
         return hit.centerOnNativeCapture()
     }
 
-    /**
-     * 选项决策（对齐 PC 版 ChatOptionChoose 的优先级）：
-     * select 主动选择 > pause 暂停 > defaultPause 默认暂停 > 兜底点最下方。
-     */
     private fun decideOption(content: CaptureContent, cw: Int, ch: Int): Region? {
         val z = zones(cw, ch)
         val regions = ocr(content, z.option.x(cw), z.option.y(ch), z.option.w(cw), z.option.h(ch))
@@ -315,7 +309,6 @@ class AutoSkipFeature(
         return sorted.last()
     }
 
-    /** 在 captureRectArea（1080p 归一化）内做 OCR，返回带文字的识别块。 */
     private fun ocr(content: CaptureContent, x: Int, y: Int, w: Int, h: Int): List<Region> {
         if (w <= 0 || h <= 0) return emptyList()
         val ro = RecognitionObject.ocrThis()
@@ -323,7 +316,6 @@ class AutoSkipFeature(
         return content.findMulti(ro)
     }
 
-    /** 黑屏转场点击（保留原版，基于 captureRectArea 灰度）。 */
     private fun clickBlackScreenIfNeeded(content: CaptureContent, actions: ActionEmitter) {
         val now = System.currentTimeMillis()
         if (now - lastBlackClickMs < BLACK_CLICK_INTERVAL_MS) return
@@ -358,7 +350,6 @@ class AutoSkipFeature(
         fun h(ch: Int) = (ch * fh).toInt().coerceAtLeast(1)
     }
 
-    /** 一套识别区域 + 继续点击比例。 */
     private data class Zones(
         val top: Box,
         val option: Box,
@@ -368,25 +359,25 @@ class AutoSkipFeature(
         val continueY: Double,
     )
 
-    /** 按 captureRectArea 宽高判断横/竖屏，给出对应比例区域。 */
+    /** 按宽高比给出一组**收窄**的识别区域，避免误判与误点。 */
     private fun zones(cw: Int, ch: Int): Zones =
         if (cw > ch) {
-            // 横屏（平板 / PC / 模拟器）：选项在屏幕正中，右上角为「跳过/自动/回顾/菜单」按钮组
+            // 横屏（平板 / PC / 模拟器）
             Zones(
-                top = Box(0.62, 0.01, 0.37, 0.20),
-                option = Box(0.14, 0.24, 0.72, 0.50),
-                bottom = Box(0.04, 0.60, 0.92, 0.38),
-                confirm = Box(0.28, 0.36, 0.44, 0.26),
+                top = Box(0.63, 0.00, 0.36, 0.15),
+                option = Box(0.32, 0.30, 0.58, 0.42),
+                bottom = Box(0.10, 0.68, 0.80, 0.22),
+                confirm = Box(0.30, 0.38, 0.40, 0.22),
                 continueX = 0.50,
-                continueY = 0.74,
+                continueY = 0.72,
             )
         } else {
             // 竖屏（手机）
             Zones(
-                top = Box(0.58, 0.01, 0.40, 0.15),
-                option = Box(0.40, 0.16, 0.58, 0.68),
-                bottom = Box(0.06, 0.68, 0.88, 0.28),
-                confirm = Box(0.22, 0.42, 0.56, 0.22),
+                top = Box(0.60, 0.00, 0.39, 0.12),
+                option = Box(0.46, 0.26, 0.50, 0.48),
+                bottom = Box(0.08, 0.76, 0.84, 0.16),
+                confirm = Box(0.24, 0.44, 0.52, 0.20),
                 continueX = 0.50,
                 continueY = 0.82,
             )

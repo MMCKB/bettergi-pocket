@@ -92,7 +92,7 @@ class TriggerSettingsRepository(context: Context) {
         screenShareEnabled = false,
         autoPickEnabled = prefs.getBoolean(KEY_AUTO_PICK, false),
         autoSkipEnabled = prefs.getBoolean(KEY_AUTO_SKIP, false),
-        quickSkipDialogueEnabled = prefs.getBoolean(KEY_QUICK_SKIP, false),
+        quickSkipDialogueEnabled = prefs.getBoolean(KEY_QUICK_SKIP, true),
         autoLaunchGenshinEnabled = prefs.getBoolean(KEY_AUTO_LAUNCH_GENSHIN, false),
         smartOptionEnabled = prefs.getBoolean(KEY_SMART_OPTION, true),
         blackScreenClickEnabled = prefs.getBoolean(KEY_BLACK_SCREEN, true),
