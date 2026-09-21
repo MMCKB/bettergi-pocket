@@ -33,38 +33,35 @@ jobs:
 
       - name: Download OpenCV 4.9.0 source
         run: |
-          curl -sL -o /tmp/opencv.zip https://github.com/opencv/opencv/archive/refs/tags/4.9.0.zip
+          curl -sL -o /tmp/opencv.zip https://github.com/opencv/opencv/archive/refs/tags/4.12.0.zip
           cd /tmp && unzip -q opencv.zip
 
       - name: Install ant (OpenCV java bindings)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ant
 
-      - name: Configure slim OpenCV (core,imgproc,imgcodecs,java)
+      - name: Configure slim OpenCV (core,imgproc,imgcodecs)  4.12.0
         run: |
-          cmake -S /tmp/opencv-4.9.0 -B /tmp/opencv-4.9.0/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/25.2.9519653/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DANDROID_ARM_NEON=ON -DBUILD_LIST=core,imgproc,imgcodecs,java -DBUILD_SHARED_LIBS=ON -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_ANDROID_EXAMPLES=OFF -DBUILD_opencv_python3=OFF -DBUILD_opencv_android_sdk=OFF -DWITH_FFMPEG=OFF -DWITH_OPENCL=OFF -DWITH_OPENMP=OFF -DWITH_PROTOBUF=OFF -DWITH_1394=OFF -DWITH_V4L=OFF -DWITH_GSTREAMER=OFF -DWITH_QT=OFF
+          cmake -S /tmp/opencv-4.12.0 -B /tmp/opencv-4.12.0/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/25.2.9519653/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DANDROID_ARM_NEON=ON -DBUILD_LIST=core,imgproc,imgcodecs -DBUILD_SHARED_LIBS=ON -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_ANDROID_EXAMPLES=OFF -DBUILD_opencv_python3=OFF -DBUILD_opencv_android_sdk=OFF -DWITH_FFMPEG=OFF -DWITH_OPENCL=OFF -DWITH_OPENMP=OFF -DWITH_PROTOBUF=OFF -DWITH_1394=OFF -DWITH_V4L=OFF -DWITH_GSTREAMER=OFF -DWITH_QT=OFF
 
       - name: Build (native + java jar)
-        working-directory: /tmp/opencv-4.9.0/build
-        run: make -j4 opencv_java opencv_java_jar
+        working-directory: /tmp/opencv-4.12.0/build
+        run: make -j4 opencv_java
 
       - name: Strip & copy slim .so + java jar into repo
         run: |
           STRIP="$ANDROID_HOME/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
           mkdir -p app/src/main/jniLibs/arm64-v8a libs
-          for f in $(find /tmp/opencv-4.9.0/build -name 'libopencv_*.so'); do
+          for f in $(find /tmp/opencv-4.12.0/build -name 'libopencv_*.so'); do
             "$STRIP" "$f"
             cp "$f" app/src/main/jniLibs/arm64-v8a/
           done
-          JAR=$(find /tmp/opencv-4.9.0/build -name '*.jar' ! -name '*sources*' ! -name '*javadoc*' | head -1)
-          if [ -z "$JAR" ]; then echo "::error::opencv jar not found"; find /tmp/opencv-4.9.0/build -name '*.jar'; exit 1; fi
-          cp "$JAR" libs/opencv-490-custom.jar
-          ls -la app/src/main/jniLibs/arm64-v8a/ libs/opencv-490-custom.jar
+          ls -la app/src/main/jniLibs/arm64-v8a/
 
       - name: Commit slim OpenCV
         run: |
           git config user.name "ci-bot"
           git config user.email "ci-bot@users.noreply.github.com"
-          git add app/src/main/jniLibs/arm64-v8a/ libs/opencv-490-custom.jar
+          git add app/src/main/jniLibs/arm64-v8a/
           if git diff --cached --quiet; then
             echo "no change, skip commit"
           else
