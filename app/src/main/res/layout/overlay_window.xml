@@ -401,7 +401,6 @@
                     app:trackTintMode="src_in" />
             </LinearLayout>
 
-            </LinearLayout>
             <LinearLayout
                 android:id="@+id/overlay_row_tap_indicator"
                 android:layout_width="match_parent"
@@ -492,6 +491,7 @@
                     app:thumbTintMode="src_in"
                     app:trackTint="@color/overlay_switch_track"
                     app:trackTintMode="src_in" />
+            </LinearLayout>
             </LinearLayout>
 
                     </LinearLayout>
