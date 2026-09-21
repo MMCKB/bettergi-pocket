@@ -50,6 +50,12 @@
             android:visibility="gone" />
     </FrameLayout>
 
+    <com.zenlesszonezero.pocket.overlay.MaxHeightScrollView
+        android:id="@+id/overlay_panel_scroll"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:scrollbars="none">
+
     <LinearLayout
         android:id="@+id/overlay_panel"
         android:layout_width="228dp"
@@ -282,7 +288,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="1dp"
-                        android:text="对话中点击屏幕下方继续"
+                        android:text="优先跳过；无跳过按钮时长按菜单跳过"
                         android:textColor="@color/overlay_text_muted"
                         android:textSize="10sp" />
                 </LinearLayout>
@@ -751,4 +757,5 @@
                 android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
+    </com.zenlesszonezero.pocket.overlay.MaxHeightScrollView>
 </FrameLayout>

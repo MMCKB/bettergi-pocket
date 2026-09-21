@@ -30,25 +30,22 @@ android {
     }
 
     signingConfigs {
-        create("fixed") {
-            val keystorePath = System.getenv("KEYSTORE_PATH")
-            if (keystorePath != null) {
-                storeFile = file(keystorePath)
-                storePassword = System.getenv("KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("KEY_ALIAS")
-                keyPassword = System.getenv("KEY_PASSWORD")
-            }
+        // 统一签名：仓库内置固定 keystore，保证所有构建的签名一致（可覆盖安装/升级）
+        create("unified") {
+            storeFile = file("zzz-pocket.jks")
+            storePassword = "zzzpocket2026"
+            keyAlias = "zzzpocket"
+            keyPassword = "zzzpocket2026"
         }
     }
 
     buildTypes {
         debug {
-            if (System.getenv("KEYSTORE_PATH") != null) {
-                signingConfig = signingConfigs.getByName("fixed")
-            }
+            signingConfig = signingConfigs.getByName("unified")
         }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("unified")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
