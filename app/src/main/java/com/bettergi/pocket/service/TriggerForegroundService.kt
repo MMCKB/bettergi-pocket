@@ -61,7 +61,7 @@ class TriggerForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        AppLog.i(TAG, "service created")
+        AppLog.i(TAG, "服务已创建")
         settingsRepository = TriggerSettingsRepository(applicationContext)
         captureController = ScreenCaptureController(applicationContext) {
             if (settingsRepository.get().screenShareEnabled) {
@@ -71,7 +71,7 @@ class TriggerForegroundService : Service() {
                     "屏幕共享已停止，可能被其他录制应用占用",
                     Toast.LENGTH_SHORT,
                 ).show()
-                AppLog.w(TAG, "screen share stopped unexpectedly")
+                AppLog.w(TAG, "屏幕共享意外停止")
             }
         }
         genshinLauncher = GenshinLauncher(applicationContext)
@@ -104,12 +104,12 @@ class TriggerForegroundService : Service() {
                     OptionKeywords.load(applicationContext.assets),
                 ),
             ),
-            actionController = RootAutomationController(applicationContext),
+            actionController = RootAutomationController(applicationContext, overlayController),
         )
         settingsRepository.addListener(settingsListener)
         Thread {
             val ok = RootBridge.start()
-            AppLog.i(TAG, "root backend start -> $ok")
+            AppLog.i(TAG, "root 后端启动 -> ${if (ok) "成功" else "失败"}")
             mainHandler.post { overlayController.refreshStatus() }
             if (!ok) {
                 mainHandler.post {
@@ -127,7 +127,7 @@ class TriggerForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        AppLog.i(TAG, "onStartCommand action=${intent?.action}")
+        AppLog.i(TAG, "启动指令 action=${intent?.action}")
         when (intent?.action) {
             ACTION_START -> {
                 startInForeground(sharing = captureController.isRunning())
@@ -169,7 +169,7 @@ class TriggerForegroundService : Service() {
     }
 
     override fun onDestroy() {
-        AppLog.i(TAG, "service destroyed")
+        AppLog.i(TAG, "服务已销毁")
         settingsRepository.removeListener(settingsListener)
         shutdown()
         super.onDestroy()
@@ -180,7 +180,7 @@ class TriggerForegroundService : Service() {
     private fun shutdown() {
         if (shutDown) return
         shutDown = true
-        AppLog.i(TAG, "service shutting down")
+        AppLog.i(TAG, "服务关闭中")
         RootBridge.stop()
         genshinLaunchMonitor.stop()
         engine.release()

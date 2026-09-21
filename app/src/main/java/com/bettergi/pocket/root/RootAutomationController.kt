@@ -6,6 +6,7 @@ import com.bettergi.pocket.input.AutomationAction
 import com.bettergi.pocket.input.AutomationController
 import com.bettergi.pocket.input.BackAction
 import com.bettergi.pocket.log.AppLog
+import com.bettergi.pocket.overlay.OverlayWindowController
 import com.bettergi.pocket.input.ClickAction
 
 /**
@@ -21,6 +22,7 @@ import com.bettergi.pocket.input.ClickAction
  */
 class RootAutomationController(
     private val context: Context,
+    private val overlay: OverlayWindowController,
     private val bridge: RootBridge = RootBridge,
 ) : AutomationController {
 
@@ -32,17 +34,23 @@ class RootAutomationController(
             is ClickAction -> {
                 if (bridge.uinputReady() == false) {
                     // input 命令模式：直接用屏幕坐标（无需反旋转）
-                    if (!bridge.inputTap(action.x, action.y)) {
+                    if (bridge.inputTap(action.x, action.y)) {
+                        overlay.flashTap(action.x, action.y)
+                    } else {
                         AppLog.w(TAG, "input tap failed at ${action.x},${action.y}")
                     }
                     return
                 }
                 // uinput 模式：先反旋转到设备自然坐标再注入
                 val (dx, dy) = toDeviceCoordinates(action.x, action.y)
-                if (!bridge.tap(dx, dy, action.durationMs)) {
+                if (bridge.tap(dx, dy, action.durationMs)) {
+                    overlay.flashTap(action.x, action.y)
+                } else {
                     AppLog.w(TAG, "uinput tap failed at ${action.x},${action.y} -> $dx,$dy, fallback input-cmd")
                     bridge.downgradeToInputMode()
-                    bridge.inputTap(action.x, action.y)
+                    if (bridge.inputTap(action.x, action.y)) {
+                        overlay.flashTap(action.x, action.y)
+                    }
                 }
             }
             BackAction -> {

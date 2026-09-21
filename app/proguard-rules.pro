@@ -19,3 +19,15 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# ===== OpenCV Java 绑定：native 方法通过 JNI 按类名/方法名查找，必须完整保留 =====
+-keep class org.opencv.** { *; }
+-keep class org.opencv.android.** { *; }
+-keepclassmembers class org.opencv.** { *; }
+
+# ===== ML Kit OCR：模型加载与管线依赖类名反射，保留 =====
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.internal.mlkit_common.** { *; }
+
+# ===== 保留异常栈行号，便于日志定位 =====
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

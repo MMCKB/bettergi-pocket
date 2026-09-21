@@ -57,7 +57,7 @@ object RootBridge {
     fun downgradeToInputMode() {
         if (uinputAvailable == true) {
             uinputAvailable = false
-            AppLog.w(TAG, "uinput tap failed, downgraded to input-cmd mode")
+            AppLog.w(TAG, "uinput 注入失败，已降级到 input 命令模式")
         }
     }
 
@@ -84,7 +84,7 @@ object RootBridge {
         val process = try {
             ProcessBuilder("sh", "-c", cmd).redirectErrorStream(false).start()
         } catch (e: Exception) {
-            AppLog.e(TAG, "start helper failed", e)
+            AppLog.e(TAG, "启动 helper 失败", e)
             return false
         }
         helperProcess = process
@@ -95,7 +95,7 @@ object RootBridge {
         while (System.currentTimeMillis() < deadline) {
             Thread.sleep(60)
             if (!process.isAlive) {
-                AppLog.e(TAG, "helper exited early, code=${process.exitValue()}")
+                AppLog.e(TAG, "helper 提前退出，code=${process.exitValue()}")
                 return false
             }
             val s = tryConnect(sockPath, logFailure = firstFail).also { if (it == null) firstFail = false } ?: continue
@@ -105,19 +105,19 @@ object RootBridge {
             val pong = request("PING", PING_TIMEOUT_MS)?.trim()
             if (pong == "OK pong" || pong == "pong") {
                 running = true
-                AppLog.i(TAG, "root backend connected")
+                AppLog.i(TAG, "root 已连接")
                 detectUinputMode()
                 applyKeepAlive()
                 return true
             }
-            AppLog.w(TAG, "PING handshake failed: $pong")
+            AppLog.w(TAG, "PING 握手失败: $pong")
             try {
                 s.close()
             } catch (_: Exception) {
             }
             return false
         }
-        AppLog.e(TAG, "connect to helper timed out")
+        AppLog.e(TAG, "连接 helper 超时")
         return false
     }
 
@@ -155,7 +155,7 @@ object RootBridge {
             if (!tmp.renameTo(dest)) {
                 dest.delete()
                 if (!tmp.renameTo(dest)) {
-                    AppLog.e(TAG, "rename helper failed")
+                    AppLog.e(TAG, "替换 helper 文件失败")
                     return false
                 }
             }
@@ -176,7 +176,7 @@ object RootBridge {
             s.connect(LocalSocketAddress(path, LocalSocketAddress.Namespace.FILESYSTEM))
             s
         } catch (e: Exception) {
-            if (logFailure) AppLog.w(TAG, "connect $path failed: ${e.message}")
+            if (logFailure) AppLog.w(TAG, "连接 $path 失败: ${e.message}")
             null
         }
     }
@@ -206,7 +206,7 @@ object RootBridge {
     fun tap(x: Int, y: Int, durationMs: Long): Boolean {
         val resp = request("TAP $x $y $durationMs", 2000L)
         if (resp == null || !resp.startsWith("OK")) {
-            AppLog.w(TAG, "tap failed at $x,$y (resp=$resp)")
+            AppLog.w(TAG, "注入点击失败 ($x,$y) resp=$resp")
             return false
         }
         return true
@@ -215,7 +215,7 @@ object RootBridge {
     fun back(): Boolean {
         val resp = request("BACK", 2000L)
         if (resp == null || !resp.startsWith("OK")) {
-            AppLog.w(TAG, "back failed (resp=$resp)")
+            AppLog.w(TAG, "返回键注入失败 resp=$resp")
             return false
         }
         return true
@@ -251,10 +251,10 @@ object RootBridge {
         }
         AppLog.i(
             TAG,
-            "injection mode: " + when (uinputAvailable) {
-                true -> "uinput (fast)"
-                false -> "input-cmd (uinput unavailable, fallback)"
-                null -> "unknown (PROBE failed)"
+            "注入模式: " + when (uinputAvailable) {
+                true -> "uinput 高速注入"
+                false -> "input 命令（uinput 不可用，兼容兜底）"
+                null -> "未知（PROBE 探测失败）"
             },
         )
     }
@@ -264,7 +264,7 @@ object RootBridge {
         val ctx = appContext ?: return false
         val cmd = "${resolveSu()} -c \"input tap $x $y\""
         if (runCommand(ctx, cmd, 2500L) == null) {
-            AppLog.w(TAG, "input tap $x,$y failed")
+            AppLog.w(TAG, "input 注入失败 ($x,$y)")
             return false
         }
         return true
@@ -275,7 +275,7 @@ object RootBridge {
         val ctx = appContext ?: return false
         val cmd = "${resolveSu()} -c \"input keyevent 4\""
         if (runCommand(ctx, cmd, 2500L) == null) {
-            AppLog.w(TAG, "input back failed")
+            AppLog.w(TAG, "input 返回键失败")
             return false
         }
         return true
@@ -287,13 +287,13 @@ object RootBridge {
         val pkg = appContext?.packageName ?: return
         if (request("KEEPALIVE $pkg", 3000L)?.startsWith("OK") == true) {
             keepAliveApplied = true
-            AppLog.i(TAG, "keep-alive applied for $pkg")
+            AppLog.i(TAG, "已申请保活: $pkg")
         }
     }
 
     @Synchronized
     fun stop() {
-        if (running) AppLog.i(TAG, "root backend stopping")
+        if (running) AppLog.i(TAG, "root 后端停止")
         running = false
         try {
             output?.write("QUIT\n".toByteArray(Charsets.UTF_8))
@@ -321,7 +321,7 @@ object RootBridge {
                 try {
                     stream.bufferedReader().useLines { lines ->
                         lines.forEach { line ->
-                            if (line.isNotBlank()) AppLog.i(TAG, "[$prefix] $line")
+                            if (line.isNotBlank()) AppLog.d(TAG, "[$prefix] $line")
                         }
                     }
                 } catch (_: Throwable) {

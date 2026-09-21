@@ -52,12 +52,17 @@ jobs:
             yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
           fi
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Build APK (main=debug, root=release+R8)
+        run: |
+          if [ "${{ github.ref_name }}" = "root" ]; then
+            ./gradlew assembleRelease --no-daemon
+          else
+            ./gradlew assembleDebug --no-daemon
+          fi
 
-      - name: Upload debug APKs
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: bettergi-pocket-root-debug-apk
+          name: ${{ github.ref_name == 'root' && 'bettergi-pocket-root-release-apk' || 'bettergi-pocket-debug-apk' }}
           path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error

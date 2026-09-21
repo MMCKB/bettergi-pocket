@@ -63,10 +63,12 @@ object AppLog {
     private fun write(priority: Int, tag: String, message: String) {
         Log.println(priority, tag, message)
         val line = "${timeFormat.format(Date())} ${levelTag(priority)} [$tag] $message"
-        for (sink in sinks) {
-            try {
-                sink.onLog(line)
-            } catch (_: Throwable) {
+        if (priority != Log.DEBUG) {
+            for (sink in sinks) {
+                try {
+                    sink.onLog(line)
+                } catch (_: Throwable) {
+                }
             }
         }
         val dir = logDir ?: return

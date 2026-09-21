@@ -610,7 +610,7 @@ class OverlayWindowController(
 
     override fun onOptionTextsRecognized(texts: List<String>) {
         if (texts.isNotEmpty()) {
-            AppLog.i("BetterGI.AutoSkip", "选项文字：${texts.joinToString("、")}")
+            AppLog.d("BetterGI.AutoSkip", "选项文字：${texts.joinToString("、")}")
         }
     }
 
