@@ -24,7 +24,7 @@ android {
         abi {
             isEnable = true
             reset()
-            include("armeabi-v7a", "arm64-v8a", "x86_64")
+            include("arm64-v8a")
             isUniversalApk = false
         }
     }
@@ -82,7 +82,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
-    implementation(libs.opencv)
+    implementation(files("libs/opencv-490-custom.jar"))
     implementation(libs.mlkit.text.recognition.chinese)
     testImplementation(libs.junit)
     val desktopOpenCv = file("libs/opencv-4.9.0-0.jar")
