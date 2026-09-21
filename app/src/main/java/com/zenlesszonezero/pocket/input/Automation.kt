@@ -1,0 +1,23 @@
+package com.zenlesszonezero.pocket.input
+
+sealed interface AutomationAction
+
+data class ClickAction(
+    val x: Int,
+    val y: Int,
+    val durationMs: Long = 50L,
+) : AutomationAction
+
+data object BackAction : AutomationAction
+
+interface AutomationController {
+    fun execute(action: AutomationAction)
+}
+
+object NoOpAutomationController : AutomationController {
+    override fun execute(action: AutomationAction) = Unit
+}
+
+interface ActionEmitter {
+    fun emit(action: AutomationAction)
+}

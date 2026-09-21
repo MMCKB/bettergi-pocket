@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "com.bettergi.pocket"
+    namespace = "com.zenlesszonezero.pocket"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -11,7 +11,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.bettergi.pocket"
+        applicationId = "com.zenlesszonezero.pocket"
         minSdk = 24
         targetSdk = 36
         versionCode = 3

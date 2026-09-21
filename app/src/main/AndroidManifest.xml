@@ -13,12 +13,10 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
-        <package android:name="com.miHoYo.Yuanshen" />
-        <package android:name="com.miHoYo.ys.bilibili" />
-        <package android:name="com.miHoYo.GenshinImpact" />
-        <package android:name="com.miHoYo.cloudgames.ys" />
-        <package android:name="com.miHoYo.cloudgames.GenshinImpact" />
-        <package android:name="com.miHoYo.ys.mi" />
+        <package android:name="com.miHoYo.zenlessZoneZero" />
+        <package android:name="com.HoYoverse.zenlessZoneZero" />
+        <package android:name="com.miHoYo.cloudgames.zenlessZoneZero" />
+        <package android:name="com.miHoYo.cloudgames.ZZZ" />
     </queries>
 
     <application
