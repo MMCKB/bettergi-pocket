@@ -36,6 +36,13 @@ android {
         }
     }
 
+    packaging {
+        jniLibs {
+            // libc++_shared 无任何 so 依赖（ML Kit/裁剪 OpenCV 均用系统库），排除省 ~1MB
+            excludes += "lib/arm64-v8a/libc++_shared.so"
+        }
+    }
+
     signingConfigs {
         create("fixed") {
             val keystorePath = System.getenv("KEYSTORE_PATH")
