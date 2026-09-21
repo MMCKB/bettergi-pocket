@@ -29,6 +29,19 @@ android {
         }
     }
 
+    packaging {
+        jniLibs {
+            // arm64 用仓库内裁剪版 OpenCV（core+imgproc+imgcodecs），排除 maven 全量 so
+            excludes += "lib/arm64-v8a/libopencv_java4.so"
+        }
+    }
+
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/jniLibs")
+        }
+    }
+
     signingConfigs {
         create("fixed") {
             val keystorePath = System.getenv("KEYSTORE_PATH")
