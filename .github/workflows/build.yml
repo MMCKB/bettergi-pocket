@@ -49,11 +49,9 @@ jobs:
 
       - name: Copy slim .so into repo
         run: |
-          SO=$(find /tmp/opencv-4.9.0/build -name 'libopencv_java4.so' | head -1)
-          if [ -z "$SO" ]; then echo "::error::libopencv_java4.so not found"; exit 1; fi
-          ls -la "$SO"
           mkdir -p app/src/main/jniLibs/arm64-v8a
-          cp "$SO" app/src/main/jniLibs/arm64-v8a/libopencv_java4.so
+          find /tmp/opencv-4.9.0/build -name 'libopencv_*.so' -exec cp {} app/src/main/jniLibs/arm64-v8a/ \;
+          ls -la app/src/main/jniLibs/arm64-v8a/
 
       - name: Commit slim OpenCV
         run: |

@@ -32,7 +32,12 @@ android {
     packaging {
         jniLibs {
             // arm64 用仓库内裁剪版 OpenCV（core+imgproc+imgcodecs），排除 maven 全量 so
-            excludes += "lib/arm64-v8a/libopencv_java4.so"
+            excludes += setOf(
+                "lib/arm64-v8a/libopencv_core.so",
+                "lib/arm64-v8a/libopencv_imgproc.so",
+                "lib/arm64-v8a/libopencv_imgcodecs.so",
+                "lib/arm64-v8a/libopencv_java4.so",
+            )
         }
     }
 
